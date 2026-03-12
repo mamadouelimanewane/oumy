@@ -10,7 +10,10 @@ function App() {
     setOrderStatus('loading');
     fetch('https://seven-rockets-wave.loca.lt/api/client/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'bypass-tunnel-reminder': 'true'
+      },
       body: JSON.stringify({
         client_id: 5, // ID d'Oumy D. défini dans miniseed.js
         restaurant_id: restaurantId,
@@ -34,7 +37,9 @@ function App() {
 
   // FETCH BDD
   useEffect(() => {
-    fetch('https://seven-rockets-wave.loca.lt/api/client/plats')
+    fetch('https://seven-rockets-wave.loca.lt/api/client/plats', {
+      headers: { 'bypass-tunnel-reminder': 'true' }
+    })
       .then(res => res.json())
       .then(data => {
         // Formatter un peu les données pour coller au design actuel
