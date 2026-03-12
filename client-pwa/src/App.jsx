@@ -8,7 +8,7 @@ function App() {
 
   const handleOrder = (restaurantId) => {
     setOrderStatus('loading');
-    fetch('http://localhost:5000/api/client/orders', {
+    fetch('https://seven-rockets-wave.loca.lt/api/client/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -34,7 +34,7 @@ function App() {
 
   // FETCH BDD
   useEffect(() => {
-    fetch('http://localhost:5000/api/client/plats')
+    fetch('https://seven-rockets-wave.loca.lt/api/client/plats')
       .then(res => res.json())
       .then(data => {
         // Formatter un peu les données pour coller au design actuel
