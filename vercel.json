@@ -1,0 +1,13 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/assets/(.*)",
+      "destination": "/client-pwa/dist/assets/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/client-pwa/dist/index.html"
+    }
+  ]
+}
