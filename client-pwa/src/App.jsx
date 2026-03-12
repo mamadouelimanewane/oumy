@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Fuse from 'fuse.js';
 
 function App() {
   const [activeCategory, setActiveCategory] = useState("Tous");
@@ -72,12 +73,27 @@ function App() {
     { name: 'Chawarma', icon: '🌯' },
   ];
 
-  const filteredPlats = plats.filter(p => {
-    const matchesCategory = activeCategory === 'Tous' || p.category === activeCategory;
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Moteur de recherche sémantique (Fuse.js)
+  const fuse = useMemo(() => new Fuse(plats, {
+    keys: ['name', 'description', 'category'],
+    threshold: 0.4, // Sensibilité (0 = exact, 1 = n'importe quoi)
+    includeScore: true
+  }), [plats]);
+
+  const filteredPlats = useMemo(() => {
+    // 1. Appliquer d'abord la catégorie
+    let result = activeCategory === 'Tous' 
+      ? plats 
+      : plats.filter(p => p.category === activeCategory);
+
+    // 2. Appliquer la recherche (Sémantique si > 2 caractères)
+    if (searchQuery.trim().length > 1) {
+      const searchResults = fuse.search(searchQuery);
+      result = searchResults.map(r => r.item);
+    }
+
+    return result;
+  }, [plats, activeCategory, searchQuery, fuse]);
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 relative">
