@@ -61,6 +61,9 @@ setTimeout(() => {
     db.run("DELETE FROM users");
     db.run("DELETE FROM menu_items");
     db.run("DELETE FROM orders");
+    db.run("DELETE FROM sqlite_sequence WHERE name='users'");
+    db.run("DELETE FROM sqlite_sequence WHERE name='menu_items'");
+    db.run("DELETE FROM sqlite_sequence WHERE name='orders'");
 
     const stmtUsers = db.prepare("INSERT INTO users (role, name, phone, password, address) VALUES (?, ?, ?, ?, ?)");
     stmtUsers.run(['restaurant', 'Chef Ousmane (Dark Kitchen)', '+221771234567', 'pass123', 'Plateau, Dakar']);
