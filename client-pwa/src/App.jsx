@@ -8,7 +8,7 @@ function App() {
 
   const handleOrder = (restaurantId) => {
     setOrderStatus('loading');
-    fetch('https://seven-rockets-wave.loca.lt/api/client/orders', {
+    fetch('https://cuddly-birds-rescue.loca.lt/api/client/orders', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -37,7 +37,7 @@ function App() {
 
   // FETCH BDD
   useEffect(() => {
-    fetch('https://seven-rockets-wave.loca.lt/api/client/plats', {
+    fetch('https://cuddly-birds-rescue.loca.lt/api/client/plats', {
       headers: { 'bypass-tunnel-reminder': 'true' }
     })
       .then(res => res.json())
