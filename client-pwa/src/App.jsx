@@ -4,6 +4,7 @@ function App() {
   const [activeCategory, setActiveCategory] = useState("Tous");
   const [plats, setPlats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState(null); // loading | success | error
 
   const handleOrder = (restaurantId) => {
@@ -71,9 +72,12 @@ function App() {
     { name: 'Chawarma', icon: '🌯' },
   ];
 
-  const filteredPlats = activeCategory === 'Tous' 
-    ? plats 
-    : plats.filter(p => p.category === activeCategory);
+  const filteredPlats = plats.filter(p => {
+    const matchesCategory = activeCategory === 'Tous' || p.category === activeCategory;
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 relative">
@@ -129,9 +133,19 @@ function App() {
             <svg className="w-6 h-6 text-gray-500 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input 
               type="text" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Rechercher un plat, un restaurant..." 
               className="w-full bg-transparent border-none focus:outline-none text-gray-800 px-3 placeholder-gray-500 font-medium"
             />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery("")}
+                className="p-1 text-gray-400 hover:text-gray-600 mr-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            )}
             <button className="bg-primary hover:bg-orange-600 text-white rounded-xl p-3 transition-colors">
                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
             </button>
@@ -187,6 +201,18 @@ function App() {
           <div className="flex flex-col gap-5">
             {loading ? (
               <div className="text-center py-10 text-gray-400 font-medium">Chargement des plats...</div>
+            ) : filteredPlats.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-5xl mb-4">🔍</div>
+                <h3 className="text-lg font-bold text-gray-900">Aucun résultat trouvé</h3>
+                <p className="text-gray-500 text-sm mt-1">Essayez d'autres mots clés ou une autre catégorie.</p>
+                <button 
+                  onClick={() => { setSearchQuery(""); setActiveCategory("Tous"); }}
+                  className="mt-6 text-primary font-bold hover:underline"
+                >
+                  Afficher tout
+                </button>
+              </div>
             ) : filteredPlats.map(plat => (
               <div key={plat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
                 <div className="h-40 relative">
