@@ -35,6 +35,19 @@ app.get('/api/client/restaurants', (req, res) => {
   });
 });
 
+// Récupérer tous les plats
+app.get('/api/client/plats', (req, res) => {
+  db.all(`
+    SELECT m.id, m.restaurant_id, m.name, m.description, m.price, m.image_url, m.category, r.name as restaurant_name 
+    FROM menu_items m
+    JOIN users r ON m.restaurant_id = r.id
+    WHERE m.is_available = 1
+  `, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
 // Créer une commande (avec initialisation Wave/Orange Money simulée)
 app.post('/api/client/orders', (req, res) => {
   const { client_id, restaurant_id, total_amount, payment_method, delivery_address } = req.body;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 function App() {
   const [activeCategory, setActiveCategory] = useState("Tous");
-  const [restaurants, setRestaurants] = useState([]);
+  const [plats, setPlats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orderStatus, setOrderStatus] = useState(null); // loading | success | error
 
@@ -34,39 +34,41 @@ function App() {
 
   // FETCH BDD
   useEffect(() => {
-    fetch('http://localhost:5000/api/client/restaurants')
+    fetch('http://localhost:5000/api/client/plats')
       .then(res => res.json())
       .then(data => {
         // Formatter un peu les données pour coller au design actuel
-        const formatted = data.map(r => ({
-          id: r.id,
-          name: r.name,
-          image: r.id === 1 ? 'https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80' : 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+        const formatted = data.map(p => ({
+          ...p,
           rating: (Math.random() * (5.0 - 4.0) + 4.0).toFixed(1),
           deliveryTime: '20-30 min',
-          tags: r.id === 1 ? ['Dark Kitchens', 'Tiep Bou Dien'] : ['Fast Food'],
-          featured: r.id === 1 // Le premier resto est mis en avant
+          featured: p.id % 5 === 0 // Un plat sur 5 est mis en avant
         }));
-        setRestaurants(formatted);
+        setPlats(formatted);
         setLoading(false);
       })
       .catch(err => {
-         console.error("Erreur Fetch Restaurants: ", err);
+         console.error("Erreur Fetch Plats: ", err);
          setLoading(false);
       });
   }, []);
 
   const categories = [
     { name: 'Tous', icon: '🍽️' },
-    { name: 'Tiep Bou Dien', icon: '🐟' },
+    { name: 'Sénégalais', icon: '🐟' },
     { name: 'Fast Food', icon: '🍔' },
-    { name: 'Dark Kitchens', icon: '👻' },
+    { name: 'Pizza', icon: '🍕' },
     { name: 'Jus Locaux', icon: '🍹' },
+    { name: 'Desserts', icon: '🍰' },
+    { name: 'Grillades', icon: '🍢' },
+    { name: 'Asiatique', icon: '🍣' },
+    { name: 'Salades', icon: '🥗' },
+    { name: 'Chawarma', icon: '🌯' },
   ];
 
-  const filteredRestaurants = activeCategory === 'Tous' 
-    ? restaurants 
-    : restaurants.filter(r => r.tags.includes(activeCategory));
+  const filteredPlats = activeCategory === 'Tous' 
+    ? plats 
+    : plats.filter(p => p.category === activeCategory);
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 relative">
@@ -179,34 +181,35 @@ function App() {
 
           <div className="flex flex-col gap-5">
             {loading ? (
-              <div className="text-center py-10 text-gray-400 font-medium">Chargement des restaurants...</div>
-            ) : filteredRestaurants.map(restaurant => (
-              <div key={restaurant.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
+              <div className="text-center py-10 text-gray-400 font-medium">Chargement des plats...</div>
+            ) : filteredPlats.map(plat => (
+              <div key={plat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
                 <div className="h-40 relative">
-                  <img src={restaurant.image} alt={restaurant.name} className="w-full h-full object-cover" />
-                  {restaurant.featured && (
+                  <img src={plat.image_url} alt={plat.name} className="w-full h-full object-cover" />
+                  {plat.featured && (
                     <div className="absolute top-3 left-3 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1">
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
                       Recommandé
                     </div>
                   )}
                   <div className="absolute bottom-3 right-3 bg-white px-2 py-1 rounded-lg text-xs font-bold text-gray-800 shadow-sm">
-                    {restaurant.deliveryTime}
+                    {plat.deliveryTime}
                   </div>
                 </div>
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-bold text-gray-900 text-lg">{restaurant.name}</h3>
+                    <h3 className="font-bold text-gray-900 text-lg">{plat.name}</h3>
                     <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-md text-xs font-bold">
                       <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
-                      {restaurant.rating}
+                      {plat.rating}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
-                    <span>{restaurant.tags.join(' • ')}</span>
+                  <div className="flex justify-between items-center text-sm font-medium">
+                    <span className="text-gray-500">{plat.restaurant_name}</span>
+                    <span className="text-primary font-bold text-lg">{plat.price} FCFA</span>
                   </div>
                   <button 
-                    onClick={(e) => { e.stopPropagation(); handleOrder(restaurant.id); }}
+                    onClick={(e) => { e.stopPropagation(); handleOrder(plat.restaurant_id); }}
                     disabled={orderStatus === 'loading'}
                     className="mt-4 w-full bg-primary hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm transition-colors shadow-md shadow-primary/30 flex justify-center items-center"
                   >
