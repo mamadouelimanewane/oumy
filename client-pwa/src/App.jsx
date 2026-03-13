@@ -10,7 +10,8 @@ function App() {
 
   const handleOrder = (restaurantId) => {
     setOrderStatus('loading');
-    fetch('https://sen-food-api-v2-2026.loca.lt/api/client/orders', {
+    const apiUrl = 'https://senfood-api-final-2026.loca.lt/api/client/orders';
+    fetch(apiUrl, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -39,7 +40,9 @@ function App() {
 
   // FETCH BDD
   useEffect(() => {
-    fetch('https://sen-food-api-v2-2026.loca.lt/api/client/plats', {
+    const apiUrl = 'https://senfood-api-final-2026.loca.lt/api/client/plats';
+    console.log("Connecté à l'API: ", apiUrl);
+    fetch(apiUrl, {
       headers: { 'bypass-tunnel-reminder': 'true' }
     })
       .then(res => res.json())
