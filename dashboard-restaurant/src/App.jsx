@@ -9,7 +9,7 @@ import {
   Search,
   CheckCircle2,
   Clock,
-  Motorcycle,
+  Bike,
   Plus,
   Edit,
   Trash2
@@ -219,7 +219,7 @@ function App() {
                 {/* Colonne 3: Prêtes au livreur */}
                 <div className="bg-slate-100/50 rounded-2xl p-4 border border-slate-200/60">
                   <div className="flex items-center justify-between mb-4 px-2">
-                    <h3 className="font-bold text-slate-700 flex items-center"><Motorcycle className="w-4 h-4 mr-2" /> Attente Livreur</h3>
+                    <h3 className="font-bold text-slate-700 flex items-center"><Bike className="w-4 h-4 mr-2" /> Attente Livreur</h3>
                     <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">1</span>
                   </div>
 
@@ -233,7 +233,7 @@ function App() {
                       <p className="text-xs text-slate-500 mb-3">{order.items}</p>
                       
                       <div className="bg-green-50 text-green-700 p-2 rounded-lg flex items-center text-xs font-medium mb-3">
-                        <Motorcycle className="w-4 h-4 mr-2"/> Livreur (Ahmed) à 2 min
+                        <Bike className="w-4 h-4 mr-2"/> Livreur (Ahmed) à 2 min
                       </div>
 
                       <div className="flex justify-between items-center">

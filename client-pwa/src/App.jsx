@@ -2,41 +2,38 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Fuse from 'fuse.js';
 
 function App() {
+  const [activePage, setActivePage] = useState('explorer'); // explorer | panier | commandes | profil
   const [activeCategory, setActiveCategory] = useState("Tous");
   const [plats, setPlats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState(null); // loading | success | error
+  const [panier, setPanier] = useState([]);
 
-  const handleOrder = (restaurantId) => {
-    setOrderStatus('loading');
-    const apiUrl = 'https://senfood-api-final-2026.loca.lt/api/client/orders';
-    fetch(apiUrl, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'bypass-tunnel-reminder': 'true'
-      },
-      body: JSON.stringify({
-        client_id: 5, // ID d'Oumy D. défini dans miniseed.js
-        restaurant_id: restaurantId,
-        total_amount: Math.floor(Math.random() * 5000) + 3000, // prix aléatoire
-        payment_method: 'wave',
-        delivery_address: 'Almadies, Dakar'
-      })
-    })
-    .then(res => res.json())
-    .then(data => {
-      setOrderStatus('success');
-      // Redescends au bout de 4 sec
-      setTimeout(() => setOrderStatus(null), 4000);
-    })
-    .catch(err => {
-      console.error(err);
-      setOrderStatus('error');
-      setTimeout(() => setOrderStatus(null), 4000);
+  const addToPanier = (plat) => {
+    setPanier(prev => {
+      const exists = prev.find(p => p.id === plat.id);
+      if (exists) return prev.map(p => p.id === plat.id ? {...p, qty: p.qty + 1} : p);
+      return [...prev, {...plat, qty: 1}];
     });
+    setOrderStatus('added');
+    setTimeout(() => setOrderStatus(null), 2000);
   };
+
+  const removeFromPanier = (id) => setPanier(prev => prev.filter(p => p.id !== id));
+
+  const handleWaveOrder = () => {
+    setOrderStatus('loading');
+    // Simuler le paiement Wave
+    setTimeout(() => {
+      setPanier([]);
+      setOrderStatus('success');
+      setActivePage('commandes');
+      setTimeout(() => setOrderStatus(null), 3000);
+    }, 2000);
+  };
+
+  const totalPanier = panier.reduce((acc, p) => acc + (p.price * p.qty), 0);
 
   // DONNÉES STATIQUES (50 plats certifiés) - garantit l'affichage même sans serveur
   const STATIC_PLATS = [
@@ -157,17 +154,24 @@ function App() {
       
       {/* TOAST / ALERTE COMMANDE */}
       {orderStatus && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100] w-11/12 max-w-sm flex items-center justify-center animate-bounce">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-11/12 max-w-sm flex items-center justify-center transition-all">
+          {orderStatus === 'added' && (
+            <div className="bg-secondary text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 animate-bounce">
+               <span className="text-2xl">🛒</span>
+               <span className="font-bold">Ajouté au panier !</span>
+            </div>
+          )}
           {orderStatus === 'loading' && (
-            <div className="bg-white px-6 py-4 rounded-full shadow-2xl flex items-center border border-wave/20">
-               <div className="w-5 h-5 rounded-full border-4 border-t-wave border-l-wave border-b-gray-200 border-r-gray-200 animate-spin mr-3"></div>
-               <span className="font-bold text-gray-800">Passerelle Wave en cours...</span>
+            <div className="bg-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-100">
+               <div className="w-5 h-5 rounded-full border-4 border-t-primary border-l-primary border-b-gray-200 border-r-gray-200 animate-spin"></div>
+               <img src="/wave-logo.png" className="h-5 object-contain" alt="Wave"/>
+               <span className="font-bold text-gray-800">Paiement Wave en cours...</span>
             </div>
           )}
           {orderStatus === 'success' && (
-            <div className="bg-green-500 px-6 py-4 rounded-full shadow-2xl flex items-center">
-               <span className="text-white text-xl mr-2">✅</span>
-               <span className="font-bold text-white">Payé et validé !</span>
+            <div className="bg-green-500 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
+               <span className="text-white text-2xl">✅</span>
+               <span className="font-bold text-white">Commande confirmée !</span>
             </div>
           )}
         </div>
@@ -334,21 +338,11 @@ function App() {
                     <span className="text-primary font-black text-xl">{plat.price.toLocaleString()} <span className="text-[10px] uppercase ml-0.5">FCFA</span></span>
                   </div>
                   <button 
-                    onClick={(e) => { e.stopPropagation(); handleOrder(plat.restaurant_id); }}
-                    disabled={orderStatus === 'loading'}
-                    className="mt-6 w-full bg-primary hover:bg-orange-600 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg shadow-primary/30 flex justify-center items-center gap-2 group/btn"
+                    onClick={(e) => { e.stopPropagation(); addToPanier(plat); }}
+                    className="mt-6 w-full bg-secondary hover:bg-gray-800 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg flex justify-center items-center gap-2 group/btn"
                   >
-                     {orderStatus === 'loading' ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                          Chargement...
-                        </>
-                     ) : (
-                        <>
-                          Commander (Wave 🌊)
-                          <ChevronRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />
-                        </>
-                     )}
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                    Ajouter au panier
                   </button>
                 </div>
               </div>
@@ -357,40 +351,166 @@ function App() {
         </div>
       </main>
 
+      {/* PAGE PANIER */}
+      {activePage === 'panier' && (
+        <main className="max-w-2xl mx-auto px-6 py-8 pb-32">
+          <h2 className="text-3xl font-black text-gray-900 mb-8">Mon Panier 🛒</h2>
+          {panier.length === 0 ? (
+            <div className="text-center py-24">
+              <div className="text-7xl mb-6">🛒</div>
+              <h3 className="text-xl font-bold text-gray-700">Votre panier est vide</h3>
+              <p className="text-gray-400 mt-2">Ajoutez des plats depuis l'onglet Explorer</p>
+              <button onClick={() => setActivePage('explorer')} className="mt-8 bg-primary text-white font-bold px-8 py-4 rounded-2xl hover:bg-orange-600 transition-all shadow-lg shadow-primary/30">
+                Explorer les plats
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 mb-10">
+                {panier.map(item => (
+                  <div key={item.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+                    <img src={item.image_url} alt={item.name} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0"/>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-gray-900 truncate">{item.name}</h4>
+                      <p className="text-gray-400 text-sm">{item.restaurant_name}</p>
+                      <div className="flex items-center gap-4 mt-2">
+                        <span className="text-primary font-black text-lg">{(item.price * item.qty).toLocaleString()} FCFA</span>
+                        <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-2 py-1">
+                          <button onClick={() => item.qty > 1 ? setPanier(prev => prev.map(p => p.id === item.id ? {...p, qty: p.qty-1} : p)) : removeFromPanier(item.id)} className="w-6 h-6 text-gray-600 font-black text-lg leading-none flex items-center justify-center">-</button>
+                          <span className="font-black text-gray-800 w-5 text-center">{item.qty}</span>
+                          <button onClick={() => setPanier(prev => prev.map(p => p.id === item.id ? {...p, qty: p.qty+1} : p))} className="w-6 h-6 text-gray-600 font-black text-lg leading-none flex items-center justify-center">+</button>
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => removeFromPanier(item.id)} className="text-red-400 hover:text-red-600 p-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-600 font-medium">Sous-total</span>
+                  <span className="font-bold">{totalPanier.toLocaleString()} FCFA</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-600 font-medium">Livraison</span>
+                  <span className="font-bold text-green-600">Gratuite</span>
+                </div>
+                <div className="flex justify-between items-center pt-4 border-t border-gray-100 mb-6">
+                  <span className="text-xl font-black text-gray-900">Total</span>
+                  <span className="text-2xl font-black text-primary">{totalPanier.toLocaleString()} FCFA</span>
+                </div>
+                <button
+                  onClick={handleWaveOrder}
+                  disabled={orderStatus === 'loading'}
+                  className="w-full bg-primary hover:bg-orange-600 disabled:opacity-70 text-white font-black py-5 rounded-2xl text-lg transition-all shadow-xl shadow-primary/30 flex items-center justify-center gap-3"
+                >
+                  {orderStatus === 'loading' ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <img src="/wave-logo.png" className="h-8 object-contain rounded" alt="Wave"/>
+                  )}
+                  {orderStatus === 'loading' ? 'Paiement en cours...' : 'Payer avec Wave'}
+                </button>
+              </div>
+            </>
+          )}
+        </main>
+      )}
+
+      {/* PAGE COMMANDES */}
+      {activePage === 'commandes' && (
+        <main className="max-w-2xl mx-auto px-6 py-8 pb-32">
+          <h2 className="text-3xl font-black text-gray-900 mb-8">Mes Commandes 📦</h2>
+          <div className="space-y-4">
+            {[
+              { id:'#1045', name:'Tiep Bou Dien Rouge', status:'En livraison 🏍️', time:'Dans 15 min', amount:'3 000 FCFA', color:'blue' },
+              { id:'#1044', name:'Double Cheese Burger', status:'En préparation 👨‍🍳', time:'Il y a 30 min', amount:'5 500 FCFA', color:'orange' },
+              { id:'#1043', name:'Yassa Poulet', status:'Livré ✅', time:'Hier', amount:'3 500 FCFA', color:'green' },
+            ].map(order => (
+              <div key={order.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="text-xs font-black text-gray-400 uppercase tracking-widest">{order.id}</span>
+                    <h4 className="font-bold text-gray-900 text-lg mt-0.5">{order.name}</h4>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${order.color === 'blue' ? 'bg-blue-50 text-blue-600' : order.color === 'orange' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>{order.status}</span>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                  <span className="text-gray-400 text-sm">{order.time}</span>
+                  <span className="font-black text-primary">{order.amount}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+      )}
+
+      {/* PAGE PROFIL */}
+      {activePage === 'profil' && (
+        <main className="max-w-2xl mx-auto px-6 py-8 pb-32">
+          <div className="text-center mb-10">
+            <img src="https://ui-avatars.com/api/?name=Oumy+Dia&background=f97316&color=fff&size=128" className="w-28 h-28 rounded-full mx-auto border-4 border-primary shadow-xl shadow-primary/20" alt="Profil" />
+            <h2 className="text-2xl font-black text-gray-900 mt-4">Oumy Dia</h2>
+            <p className="text-gray-400 font-medium">oumy.dia@gmail.com</p>
+            <div className="flex justify-center gap-6 mt-4 text-center">
+              <div><p className="text-2xl font-black text-primary">12</p><p className="text-xs text-gray-400">Commandes</p></div>
+              <div><p className="text-2xl font-black text-green-500">4.9</p><p className="text-xs text-gray-400">Note</p></div>
+              <div><p className="text-2xl font-black text-secondary">2</p><p className="text-xs text-gray-400">Favoris</p></div>
+            </div>
+          </div>
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            {[
+              { icon:'📍', label:'Adresse de livraison', value:'Plateau, Dakar' },
+              { icon:'📱', label:'Téléphone', value:'+221 77 123 45 67' },
+              { icon:'💳', label:'Moyen de paiement', value:'Wave (Par défaut)' },
+              { icon:'🛎️', label:'Notifications', value:'Activées' },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center px-6 py-5 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors">
+                <span className="text-2xl mr-4">{item.icon}</span>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400 font-medium">{item.label}</p>
+                  <p className="font-bold text-gray-800">{item.value}</p>
+                </div>
+                <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+              </div>
+            ))}
+          </div>
+        </main>
+      )}
+
       {/* BOTTOM NAV BAR */}
-      <nav className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
+      <nav className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.07)] z-50">
         <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
-          <button className="flex flex-col items-center gap-1.5 text-primary group transition-all">
-            <div className="p-2 rounded-2xl bg-primary/10 transition-colors group-hover:bg-primary/20">
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
-            </div>
-            <span className="text-[11px] font-black uppercase tracking-widest">Explorer</span>
-          </button>
-          <button className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-secondary transition-all group">
-            <div className="p-2 rounded-2xl bg-transparent group-hover:bg-gray-100">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-            </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">Panier</span>
-          </button>
-          <button className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-secondary transition-all group">
-            <div className="p-2 rounded-2xl bg-transparent group-hover:bg-gray-100">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"></path></svg>
-            </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">Suivi</span>
-          </button>
-          <button className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-secondary transition-all group">
-            <div className="p-2 rounded-2xl bg-transparent group-hover:bg-gray-100">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-            </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">Profil</span>
-          </button>
+          {[
+            { id:'explorer', label:'Explorer', icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
+            { id:'panier', label:'Panier', badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
+            { id:'commandes', label:'Commandes', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> },
+            { id:'profil', label:'Profil', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActivePage(tab.id)}
+              className={`flex flex-col items-center gap-1.5 relative transition-all ${activePage === tab.id ? 'text-primary' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <div className={`p-2 rounded-2xl transition-colors ${activePage === tab.id ? 'bg-primary/10' : 'bg-transparent hover:bg-gray-100'}`}>
+                {tab.icon}
+              </div>
+              {tab.badge > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary text-white text-[10px] font-black rounded-full flex items-center justify-center">{tab.badge}</span>
+              )}
+              <span className="text-[11px] font-black uppercase tracking-widest">{tab.label}</span>
+            </button>
+          ))}
         </div>
       </nav>
     </div>
   );
 }
 
-// Composants Icones manquants
+// Composants Icones
 const Store = ({ className }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
 );

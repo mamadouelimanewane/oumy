@@ -12,7 +12,7 @@ import {
   ChevronRight,
   PieChart,
   Wallet,
-  Motorcycle
+  Bike
 } from 'lucide-react';
 
 function App() {
@@ -48,7 +48,7 @@ function App() {
           </button>
 
           <button className="w-full flex items-center px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-400 hover:text-slate-200">
-            <Motorcycle className="w-5 h-5 mr-3" />
+            <Bike className="w-5 h-5 mr-3" />
             <span className="font-semibold text-sm">Livreurs (85)</span>
           </button>
           
@@ -172,7 +172,7 @@ function App() {
                   <h3 className="text-2xl font-black text-white">24 / 45</h3>
                 </div>
                 <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                  <Motorcycle className="text-blue-400 w-6 h-6" />
+                  <Bike className="text-blue-400 w-6 h-6" />
                 </div>
               </div>
               <div className="w-full flex items-center text-sm font-medium">
