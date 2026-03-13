@@ -246,23 +246,33 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-6 py-8 relative">
         {/* Categories */}
-        <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-hide -mx-6 px-6 lg:mx-0 lg:px-0">
-          {categories.map((cat, idx) => (
-            <button 
-              key={idx}
-              onClick={() => setActiveCategory(cat.name)}
-              className={`flex flex-col items-center min-w-[90px] md:min-w-[110px] p-4 rounded-3xl transition-all duration-300 transform hover:scale-105 active:scale-95 ${
-                activeCategory === cat.name 
-                  ? 'bg-primary text-white shadow-xl shadow-primary/30 -translate-y-1' 
-                  : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-gray-50'
-              }`}
-            >
-              <div className="text-3xl mb-2">{cat.icon}</div>
-              <span className="text-xs md:text-sm font-bold whitespace-nowrap">{cat.name}</span>
-            </button>
-          ))}
+        <div className="relative mb-6">
+          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6 lg:mx-0 lg:px-0 scroll-smooth pr-10" id="categoryScroll">
+            {categories.map((cat, idx) => (
+              <button 
+                key={idx}
+                onClick={() => setActiveCategory(cat.name)}
+                className={`flex flex-col items-center min-w-[90px] md:min-w-[110px] p-4 rounded-3xl transition-all duration-300 transform hover:scale-105 active:scale-95 ${
+                  activeCategory === cat.name 
+                    ? 'bg-primary text-white shadow-xl shadow-primary/30 -translate-y-1' 
+                    : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-3xl mb-2">{cat.icon}</div>
+                <span className="text-xs md:text-sm font-bold whitespace-nowrap">{cat.name}</span>
+              </button>
+            ))}
+          </div>
+          {/* Indicateur de scroll (visible sur mobile uniquement) */}
+          <div 
+            className="absolute top-0 right-0 h-full w-14 pointer-events-none md:hidden flex items-center justify-end pr-2 bg-gradient-to-l from-neutral-50 to-transparent -mr-6"
+          >
+            <div className="bg-white/90 backdrop-blur-sm shadow-md rounded-full p-1 animate-bounce-x text-primary border border-gray-100">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
+            </div>
+          </div>
         </div>
 
         {/* Featured / Dark Kitchen Promo */}
