@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Fuse from 'fuse.js';
 
 function App() {
-  const [activePage, setActivePage] = useState('explorer'); // explorer | panier | commandes | profil
+  const [activePage, setActivePageRaw] = useState('explorer');
+  const setActivePage = (page) => { setActivePageRaw(page); window.scrollTo({ top: 0, behavior: 'instant' }); };
   const [activeCategory, setActiveCategory] = useState("Tous");
   const [plats, setPlats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -177,7 +178,9 @@ function App() {
         </div>
       )}
 
-      {/* HEADER / HERO */}
+      {/* HEADER / HERO - seulement sur Explorer */}
+      {activePage === 'explorer' && (
+      <>
       <header className="relative bg-secondary text-white rounded-b-[40px] overflow-hidden">
         {/* Background Graphic */}
         <div className="absolute top-0 left-0 w-full h-full opacity-20">
@@ -350,10 +353,17 @@ function App() {
           </div>
         </div>
       </main>
+      </>
+      )}
 
       {/* PAGE PANIER */}
       {activePage === 'panier' && (
-        <main className="max-w-2xl mx-auto px-6 py-8 pb-32">
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-2xl mx-auto">
+          <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+            Retour
+          </button>
           <h2 className="text-3xl font-black text-gray-900 mb-8">Mon Panier 🛒</h2>
           {panier.length === 0 ? (
             <div className="text-center py-24">
@@ -417,12 +427,18 @@ function App() {
               </div>
             </>
           )}
+          </div>
         </main>
       )}
 
       {/* PAGE COMMANDES */}
       {activePage === 'commandes' && (
-        <main className="max-w-2xl mx-auto px-6 py-8 pb-32">
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-2xl mx-auto">
+          <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+            Retour
+          </button>
           <h2 className="text-3xl font-black text-gray-900 mb-8">Mes Commandes 📦</h2>
           <div className="space-y-4">
             {[
@@ -445,12 +461,18 @@ function App() {
               </div>
             ))}
           </div>
+          </div>
         </main>
       )}
 
       {/* PAGE PROFIL */}
       {activePage === 'profil' && (
-        <main className="max-w-2xl mx-auto px-6 py-8 pb-32">
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-2xl mx-auto">
+          <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+            Retour
+          </button>
           <div className="text-center mb-10">
             <img src="https://ui-avatars.com/api/?name=Oumy+Dia&background=f97316&color=fff&size=128" className="w-28 h-28 rounded-full mx-auto border-4 border-primary shadow-xl shadow-primary/20" alt="Profil" />
             <h2 className="text-2xl font-black text-gray-900 mt-4">Oumy Dia</h2>
@@ -477,6 +499,7 @@ function App() {
                 <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
               </div>
             ))}
+          </div>
           </div>
         </main>
       )}
