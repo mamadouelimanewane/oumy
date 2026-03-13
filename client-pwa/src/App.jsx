@@ -184,25 +184,38 @@ function App() {
           />
         </div>
         
-        <div className="relative z-10 px-6 pt-12 pb-16 max-w-md mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <p className="text-gray-400 text-sm font-medium">Livrer à</p>
-              <div className="flex items-center gap-2 cursor-pointer">
-                <span className="font-bold text-lg">Plateau, Dakar 🇸🇳</span>
-                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
+        <div className="relative z-10 px-6 pt-12 pb-16 max-w-6xl mx-auto">
+          <div className="flex justify-between items-center mb-10">
+            <div className="flex items-center gap-4">
+               <div className="hidden sm:flex w-12 h-12 bg-primary rounded-2xl items-center justify-center shadow-lg shadow-primary/20 scale-110">
+                  <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+               </div>
+               <div>
+                 <p className="text-gray-400 text-sm font-medium">Livrer à</p>
+                 <div className="flex items-center gap-2 cursor-pointer">
+                   <span className="font-bold text-lg md:text-xl">Plateau, Dakar 🇸🇳</span>
+                   <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                 </div>
+               </div>
             </div>
-            <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
+                <span className="text-sm font-bold">Oumy Dia</span>
+                <img src="https://ui-avatars.com/api/?name=Oumy+Dia&background=f97316&color=fff" className="w-8 h-8 rounded-full" alt="User"/>
+              </div>
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all cursor-pointer">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+              </div>
             </div>
           </div>
 
-          <h1 className="text-3xl font-extrabold mb-1">Que voulez-vous</h1>
-          <h1 className="text-3xl font-extrabold text-primary mb-6">manger aujourd'hui ?</h1>
+          <div className="max-w-2xl">
+            <h1 className="text-3xl md:text-5xl font-extrabold mb-1 tracking-tight">Que voulez-vous</h1>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-primary mb-8 tracking-tight">manger aujourd'hui ?</h1>
+          </div>
 
           {/* Search Bar */}
-          <div className="relative glass rounded-2xl flex items-center p-2">
+          <div className="relative glass rounded-2xl flex items-center p-2 max-w-xl group focus-within:ring-4 focus-within:ring-primary/20 transition-all">
             <svg className="w-6 h-6 text-gray-500 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input 
               type="text" 
@@ -226,52 +239,55 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto px-6 py-6">
+      <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Categories */}
-        <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6">
+        <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-hide -mx-6 px-6 lg:mx-0 lg:px-0">
           {categories.map((cat, idx) => (
             <button 
               key={idx}
               onClick={() => setActiveCategory(cat.name)}
-              className={`flex flex-col items-center min-w-[80px] p-3 rounded-2xl transition-all ${
+              className={`flex flex-col items-center min-w-[90px] md:min-w-[110px] p-4 rounded-3xl transition-all duration-300 transform hover:scale-105 active:scale-95 ${
                 activeCategory === cat.name 
-                  ? 'bg-primary text-white shadow-lg shadow-primary/30' 
+                  ? 'bg-primary text-white shadow-xl shadow-primary/30 -translate-y-1' 
                   : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-gray-50'
               }`}
             >
-              <div className="text-2xl mb-1">{cat.icon}</div>
-              <span className="text-xs font-semibold whitespace-nowrap">{cat.name}</span>
+              <div className="text-3xl mb-2">{cat.icon}</div>
+              <span className="text-xs md:text-sm font-bold whitespace-nowrap">{cat.name}</span>
             </button>
           ))}
         </div>
 
         {/* Featured / Dark Kitchen Promo */}
-        <div className="mt-6 bg-gradient-to-r from-secondary to-gray-800 rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
-          <div className="relative z-10 w-2/3">
-            <span className="bg-primary text-xs font-bold px-2 py-1 rounded-md uppercase tracking-wide">Nouveau</span>
-            <h3 className="text-xl font-bold mt-2 leading-tight">Soutenez nos Dark Kitchens 👻</h3>
-            <p className="text-sm text-gray-300 mt-1 mb-3">La meilleure cuisine faite maison !</p>
-            <button className="text-xs font-bold bg-white text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
-              Commander
+        <div className="mt-8 bg-gradient-to-r from-secondary via-slate-800 to-gray-900 rounded-[40px] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden group">
+          <div className="relative z-10 w-full md:w-1/2">
+            <span className="bg-primary text-xs font-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-lg shadow-primary/20">Exclusivité Dakar</span>
+            <h3 className="text-3xl md:text-5xl font-black mt-4 leading-tight">Dark Kitchens 👻</h3>
+            <p className="text-lg text-gray-400 mt-2 mb-8 font-medium">Soutenez les restaurateurs locaux et profitez de saveurs authentiques faites maison.</p>
+            <button className="text-base font-bold bg-white text-secondary px-8 py-4 rounded-2xl hover:bg-gray-100 transition-all hover:px-10 shadow-xl">
+              Explorer les menus
             </button>
           </div>
           <img 
-            src="https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80" 
+            src="https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" 
             alt="Promo" 
-            className="absolute -right-10 -bottom-10 w-48 h-48 object-cover rounded-full opacity-80 border-4 border-white/10"
+            className="hidden md:block absolute -right-20 -bottom-20 w-[500px] h-[500px] object-cover rounded-full opacity-60 border-8 border-white/5 transition-transform duration-700 group-hover:scale-110"
           />
         </div>
 
         {/* Restaurants List */}
-        <div className="mt-8">
-          <div className="flex justify-between items-end mb-4">
-            <h2 className="text-xl font-bold text-gray-900">
-              {activeCategory === 'Tous' ? 'Autour de vous' : `Top en ${activeCategory}`}
-            </h2>
-            <button className="text-primary text-sm font-semibold hover:underline">Voir tout</button>
+        <div className="mt-12">
+          <div className="flex justify-between items-end mb-8 px-2">
+            <div>
+              <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">
+                {activeCategory === 'Tous' ? 'Autour de vous' : `Top en ${activeCategory}`}
+              </h2>
+              <p className="text-gray-500 font-medium mt-1">Les meilleures adresses sélectionnées pour vous.</p>
+            </div>
+            <button className="text-primary text-sm md:text-base font-bold hover:underline bg-primary/10 px-4 py-2 rounded-xl transition-all">Voir tout</button>
           </div>
 
-          <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {loading ? (
               <div className="text-center py-10 text-gray-400 font-medium">Chargement des plats...</div>
             ) : filteredPlats.length === 0 ? (
@@ -287,37 +303,52 @@ function App() {
                 </button>
               </div>
             ) : filteredPlats.map(plat => (
-              <div key={plat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
-                <div className="h-40 relative">
-                  <img src={plat.image_url} alt={plat.name} className="w-full h-full object-cover" />
+              <div key={plat.id} className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer group flex flex-col h-full">
+                <div className="h-48 relative overflow-hidden">
+                  <img src={plat.image_url} alt={plat.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
                   {plat.featured && (
-                    <div className="absolute top-3 left-3 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1">
+                    <div className="absolute top-4 left-4 bg-primary text-white text-[10px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1 uppercase tracking-tighter">
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
-                      Recommandé
+                      Coup de cœur
                     </div>
                   )}
-                  <div className="absolute bottom-3 right-3 bg-white px-2 py-1 rounded-lg text-xs font-bold text-gray-800 shadow-sm">
+                  <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-xl text-[10px] font-black text-secondary shadow-lg">
                     {plat.deliveryTime}
                   </div>
                 </div>
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-bold text-gray-900 text-lg">{plat.name}</h3>
-                    <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-md text-xs font-bold">
-                      <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                <div className="p-5 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-gray-900 text-lg line-clamp-1">{plat.name}</h3>
+                    <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-black">
+                      <svg className="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
                       {plat.rating}
                     </div>
                   </div>
-                  <div className="flex justify-between items-center text-sm font-medium">
-                    <span className="text-gray-500">{plat.restaurant_name}</span>
-                    <span className="text-primary font-bold text-lg">{plat.price} FCFA</span>
+                  <p className="text-gray-400 text-xs font-medium mb-4 line-clamp-2 leading-relaxed flex-1">{plat.description}</p>
+                  <div className="flex justify-between items-center text-sm font-medium border-t border-gray-100 pt-4">
+                    <span className="text-gray-500 font-bold flex items-center gap-1">
+                      <Store className="w-4 h-4 text-gray-300" />
+                      {plat.restaurant_name}
+                    </span>
+                    <span className="text-primary font-black text-xl">{plat.price.toLocaleString()} <span className="text-[10px] uppercase ml-0.5">FCFA</span></span>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleOrder(plat.restaurant_id); }}
                     disabled={orderStatus === 'loading'}
-                    className="mt-4 w-full bg-primary hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm transition-colors shadow-md shadow-primary/30 flex justify-center items-center"
+                    className="mt-6 w-full bg-primary hover:bg-orange-600 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg shadow-primary/30 flex justify-center items-center gap-2 group/btn"
                   >
-                     {orderStatus === 'loading' ? 'En cours...' : 'Commander (Wave 🌊)'}
+                     {orderStatus === 'loading' ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Chargement...
+                        </>
+                     ) : (
+                        <>
+                          Commander (Wave 🌊)
+                          <ChevronRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />
+                        </>
+                     )}
                   </button>
                 </div>
               </div>
@@ -327,28 +358,44 @@ function App() {
       </main>
 
       {/* BOTTOM NAV BAR */}
-      <nav className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
-        <div className="flex justify-around items-center h-16 max-w-md mx-auto">
-          <button className="flex flex-col items-center gap-1 text-primary">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
-            <span className="text-[10px] font-bold">Explorer</span>
+      <nav className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
+        <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
+          <button className="flex flex-col items-center gap-1.5 text-primary group transition-all">
+            <div className="p-2 rounded-2xl bg-primary/10 transition-colors group-hover:bg-primary/20">
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest">Explorer</span>
           </button>
-          <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-            <span className="text-[10px] font-bold">Panier</span>
+          <button className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-secondary transition-all group">
+            <div className="p-2 rounded-2xl bg-transparent group-hover:bg-gray-100">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">Panier</span>
           </button>
-          <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            <span className="text-[10px] font-bold">Commandes</span>
+          <button className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-secondary transition-all group">
+            <div className="p-2 rounded-2xl bg-transparent group-hover:bg-gray-100">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"></path></svg>
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">Suivi</span>
           </button>
-          <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-            <span className="text-[10px] font-bold">Profil</span>
+          <button className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-secondary transition-all group">
+            <div className="p-2 rounded-2xl bg-transparent group-hover:bg-gray-100">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">Profil</span>
           </button>
         </div>
       </nav>
     </div>
   );
 }
+
+// Composants Icones manquants
+const Store = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+);
+const ChevronRight = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+);
 
 export default App;
