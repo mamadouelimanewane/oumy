@@ -34,7 +34,7 @@ jobs:
       - name: Sync Capacitor
         run: |
           cd client-pwa
-          npx cap sync android
+          npx cap add android || npx cap sync android
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -75,6 +75,11 @@ jobs:
         run: |
           cd app-livreur
           npm install
+
+      - name: Generate Android Project
+        run: |
+          cd app-livreur
+          npx expo prebuild -p android --clean
 
       - name: Setup Java
         uses: actions/setup-java@v4
