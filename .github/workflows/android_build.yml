@@ -31,16 +31,17 @@ jobs:
           cd client-pwa
           npm run build
 
-      - name: Sync Capacitor
+      - name: Initialize Capacitor Android
         run: |
           cd client-pwa
           npx cap add android || npx cap sync android
+          npx cap copy android
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -85,7 +86,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
