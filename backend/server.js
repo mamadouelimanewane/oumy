@@ -1,109 +1,248 @@
 /**
- * 🇸🇳 SenFood Backend API (MVP - SQLite Version)
- * Core router pour les 4 modules: Client PWA, Dashboard Resto, Panel Admin, App Livreur
+ * 🇸🇳 SenFood Backend API - Production Ready
+ * PostgreSQL + JWT + Socket.IO + Full Features
  */
 
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
-// Importation de la connexion SQLite
-const db = require('./database');
+const { pool, initDatabase } = require('./config/database');
+const { authenticate, authorize } = require('./middleware/auth');
+
+// Routes
+const authRoutes = require('./routes/auth');
+const clientRoutes = require('./routes/client');
+const restaurantRoutes = require('./routes/restaurant');
+const livreurRoutes = require('./routes/livreur');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
+// Attacher io aux requêtes pour les notifications
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 // ==========================================
-// 🛣️ ROUTES GLOBALES (Healthcheck)
+// 🛣️ ROUTES
 // ==========================================
+
+// Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'SenFood API is running', version: '1.0.0 (SQLite MVP)' });
-});
-
-// ==========================================
-// 📱 1. APPLICATION CLIENT (PWA)
-// ==========================================
-// Récupérer les restaurants (avec filtres Dark Kitchen etc.)
-app.get('/api/client/restaurants', (req, res) => {
-  db.all("SELECT id, name, address, is_active FROM users WHERE role = 'restaurant' AND is_active = 1", [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+  res.json({ 
+    status: 'SenFood API is running', 
+    version: '2.0.0 (PostgreSQL + JWT + Socket.IO)',
+    timestamp: new Date().toISOString()
   });
 });
 
-// Récupérer tous les plats
-app.get('/api/client/plats', (req, res) => {
-  db.all(`
-    SELECT m.id, m.restaurant_id, m.name, m.description, m.price, m.image_url, m.category, r.name as restaurant_name 
-    FROM menu_items m
-    JOIN users r ON m.restaurant_id = r.id
-    WHERE m.is_available = 1
-  `, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+// Auth routes (publiques)
+app.use('/api/auth', authRoutes);
+
+// Client routes
+app.use('/api/client', clientRoutes);
+
+// Restaurant routes
+app.use('/api/restaurant', restaurantRoutes);
+
+// Livreur routes
+app.use('/api/livreur', livreurRoutes);
+
+// Admin routes
+app.use('/api/admin', adminRoutes);
+
+// ==========================================
+// 🔌 SOCKET.IO - Temps Réel
+// ==========================================
+
+const connectedUsers = new Map();
+
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+      return next(new Error('Token manquant'));
+    }
+
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret_change_in_production');
+    
+    const result = await pool.query(
+      'SELECT id, role, name FROM users WHERE id = $1 AND is_active = true',
+      [decoded.id]
+    );
+
+    if (result.rows.length === 0) {
+      return next(new Error('Utilisateur non trouvé'));
+    }
+
+    socket.user = result.rows[0];
+    next();
+  } catch (err) {
+    next(new Error('Authentification invalide'));
+  }
 });
 
-// Créer une commande (avec initialisation Wave/Orange Money simulée)
-app.post('/api/client/orders', (req, res) => {
-  const { client_id, restaurant_id, total_amount, payment_method, delivery_address } = req.body;
+io.on('connection', (socket) => {
+  console.log(`🔌 Utilisateur connecté: ${socket.user.name} (${socket.user.role})`);
   
-  const stmt = db.prepare(`
-    INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address)
-    VALUES (?, ?, 'nouvelle', ?, ?, 'en_attente', ?)
-  `);
+  connectedUsers.set(socket.user.id, {
+    socketId: socket.id,
+    userId: socket.user.id,
+    role: socket.user.role,
+    name: socket.user.name,
+  });
 
-  stmt.run([client_id, restaurant_id, total_amount, payment_method, delivery_address], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ status: 'pending', message: `Commande créée. Paiement initié via ${payment_method}`, order_id: this.lastID });
+  // Rejoindre une room spécifique au rôle
+  socket.join(socket.user.role);
+  socket.join(`user_${socket.user.id}`);
+
+  // Position du livreur (temps réel)
+  socket.on('courier_location', async (data) => {
+    if (socket.user.role !== 'livreur') return;
+
+    const { latitude, longitude, orderId } = data;
+    
+    try {
+      // Mettre à jour la position en DB
+      await pool.query(
+        `INSERT INTO courier_locations (courier_id, latitude, longitude, updated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+         ON CONFLICT (courier_id) 
+         DO UPDATE SET latitude = $2, longitude = $3, updated_at = CURRENT_TIMESTAMP`,
+        [socket.user.id, latitude, longitude]
+      );
+
+      // Notifier le client si commande en cours
+      if (orderId) {
+        const orderResult = await pool.query(
+          'SELECT client_id FROM orders WHERE id = $1 AND courier_id = $2',
+          [orderId, socket.user.id]
+        );
+
+        if (orderResult.rows.length > 0) {
+          const clientId = orderResult.rows[0].client_id;
+          io.to(`user_${clientId}`).emit('courier_location_update', {
+            orderId,
+            latitude,
+            longitude,
+            courierId: socket.user.id,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Location update error:', err);
+    }
+  });
+
+  // Nouvelle commande (restaurant notifié)
+  socket.on('new_order', async (data) => {
+    const { restaurantId, orderId } = data;
+    
+    io.to(`user_${restaurantId}`).emit('new_order_notification', {
+      orderId,
+      message: 'Nouvelle commande reçue !',
+    });
+  });
+
+  // Mise à jour statut commande
+  socket.on('order_status_update', async (data) => {
+    const { orderId, status, userId } = data;
+    
+    io.to(`user_${userId}`).emit('order_status_changed', {
+      orderId,
+      status,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Livreur disponible
+  socket.on('courier_available', async () => {
+    if (socket.user.role !== 'livreur') return;
+    
+    await pool.query(
+      'UPDATE users SET is_active = true WHERE id = $1',
+      [socket.user.id]
+    );
+    
+    io.to('admin').emit('courier_status_changed', {
+      courierId: socket.user.id,
+      status: 'available',
+    });
+  });
+
+  // Livreur hors ligne
+  socket.on('courier_offline', async () => {
+    if (socket.user.role !== 'livreur') return;
+    
+    await pool.query(
+      'UPDATE users SET is_active = false WHERE id = $1',
+      [socket.user.id]
+    );
+    
+    io.to('admin').emit('courier_status_changed', {
+      courierId: socket.user.id,
+      status: 'offline',
+    });
+  });
+
+  // Déconnexion
+  socket.on('disconnect', () => {
+    console.log(`🔌 Utilisateur déconnecté: ${socket.user.name}`);
+    connectedUsers.delete(socket.user.id);
   });
 });
 
-// Suivi temps réel d'une commande (GPS Livreur simulé)
-app.get('/api/client/orders/:id/track', (req, res) => {
-  res.json({ status: 'en_route', livreurCoords: { lat: 14.6928, lng: -17.4467 } });
-});
-
-// ==========================================
-// 🏪 2. DASHBOARD RESTAURANT
-// ==========================================
-// Réception des nouvelles commandes (Temps réel)
-app.get('/api/restaurant/:id/orders/active', (req, res) => {
-  const restaurantId = req.params.id;
-  db.all("SELECT * FROM orders WHERE restaurant_id = ? AND status IN ('nouvelle', 'preparation', 'prete')", [restaurantId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+// Fonction utilitaire pour envoyer des notifications
+const sendNotification = (userId, type, data) => {
+  io.to(`user_${userId}`).emit('notification', {
+    type,
+    data,
+    timestamp: new Date().toISOString(),
   });
-});
+};
 
-// Ajout d'un plat au menu
-app.post('/api/restaurant/menu', (req, res) => {
-  const { restaurant_id, name, description, price, category } = req.body;
-  const stmt = db.prepare("INSERT INTO menu_items (restaurant_id, name, description, price, category) VALUES (?, ?, ?, ?, ?)");
-  stmt.run([restaurant_id, name, description, price, category], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ status: 'success', message: 'Plat ajouté', menu_id: this.lastID });
-  });
-});
-
-// Statistiques du restaurant
-app.get('/api/restaurant/:id/stats', (req, res) => {
-  const restaurantId = req.params.id;
-  db.get("SELECT SUM(total_amount) as revenue, COUNT(id) as totalOrders FROM orders WHERE restaurant_id = ? AND status = 'livree'", [restaurantId], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ revenue: row.revenue || 0, totalOrders: row.totalOrders || 0 });
-  });
-});
+// Exporter pour utilisation dans les routes
+app.set('sendNotification', sendNotification);
+app.set('io', io);
 
 // ==========================================
-// 🔧 UTILS
+// 🚀 DÉMARRAGE
 // ==========================================
-// Startup du serveur
-app.listen(PORT, () => {
-  console.log(`🚀 API SenFood lancée sur http://localhost:${PORT}`);
-  console.log('📦 La base de données SQLite est connectée.');
-});
+
+const startServer = async () => {
+  try {
+    await initDatabase();
+    
+    server.listen(PORT, () => {
+      console.log(`🚀 API SenFood lancée sur http://localhost:${PORT}`);
+      console.log(`📡 Socket.IO actif pour temps réel`);
+      console.log(`🔐 JWT Authentication activée`);
+      console.log(`🐘 PostgreSQL connecté`);
+    });
+  } catch (err) {
+    console.error('❌ Erreur démarrage serveur:', err);
+    process.exit(1);
+  }
+};
+
+startServer();
+
+module.exports = { sendNotification };
