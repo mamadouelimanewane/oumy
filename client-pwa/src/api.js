@@ -162,11 +162,13 @@ export const orderExtrasAPI = {
 };
 
 // Socket.IO connection
-export const createSocketConnection = (token) => {
-  const socket = io(API_URL.replace('/api', ''), {
+export const createSocketConnection = async (token) => {
+  const { io } = await import('socket.io-client');
+  const SOCKET_URL = API_URL.replace('/api', '') || 'http://localhost:5000';
+  const socket = io(SOCKET_URL, {
     auth: { token },
+    transports: ['websocket', 'polling'],
   });
-  
   return socket;
 };
 
