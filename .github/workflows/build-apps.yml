@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
@@ -40,7 +43,7 @@ jobs:
       
       - name: Install Dependencies
         working-directory: ./client-pwa
-        run: npm ci
+        run: npm install
       
       - name: Build Web
         working-directory: ./client-pwa
@@ -100,7 +103,7 @@ jobs:
       
       - name: Install Dependencies
         working-directory: ./panel-admin
-        run: npm ci
+        run: npm install
       
       - name: Build Web
         working-directory: ./panel-admin
@@ -160,7 +163,7 @@ jobs:
 
       - name: Install Dependencies
         working-directory: ./dashboard-restaurant
-        run: npm ci
+        run: npm install
 
       - name: Build Web
         working-directory: ./dashboard-restaurant
@@ -220,7 +223,7 @@ jobs:
       
       - name: Install Dependencies
         working-directory: ./app-livreur
-        run: npm ci
+        run: npm install
       
       - name: Clean and Prebuild
         working-directory: ./app-livreur

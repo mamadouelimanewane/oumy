@@ -36,7 +36,7 @@ jobs:
       
       - name: Install Dependencies
         working-directory: ./app-livreur
-        run: npm ci
+        run: npm install
       
       - name: Clean and Prebuild
         working-directory: ./app-livreur

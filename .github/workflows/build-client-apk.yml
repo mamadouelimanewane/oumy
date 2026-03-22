@@ -37,7 +37,7 @@ jobs:
       
       - name: Install Dependencies
         working-directory: ./client-pwa
-        run: npm ci
+        run: npm install
       
       - name: Build Web
         working-directory: ./client-pwa
