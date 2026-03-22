@@ -18,12 +18,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
-          cache-dependency-path: './client-pwa/package-lock.json'
 
       - name: Install Client Dependencies
         run: |
           cd client-pwa
+          rm -f package-lock.json
           npm install
 
       - name: Build Web Application
@@ -36,13 +35,14 @@ jobs:
       - name: Initialize Capacitor Android
         run: |
           cd client-pwa
-          npx cap add android || npx cap sync android
-          npx cap copy android
+          rm -rf android
+          npx cap add android
+          npx cap sync android
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '21'
 
       - name: Set up Android SDK
@@ -51,6 +51,7 @@ jobs:
       - name: Build Client APK
         run: |
           cd client-pwa/android
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug
 
@@ -71,8 +72,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
-          cache-dependency-path: './app-livreur/package-lock.json'
 
       - name: Install Livreur Dependencies
         run: |
@@ -87,7 +86,7 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '21'
 
       - name: Set up Android SDK
@@ -96,6 +95,7 @@ jobs:
       - name: Build Livreur APK
         run: |
           cd app-livreur/android
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug
 

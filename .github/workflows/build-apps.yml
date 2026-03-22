@@ -10,9 +10,6 @@ on:
 permissions:
   contents: write
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
 jobs:
   # =====================
   # BUILD CLIENT APK
@@ -27,8 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: client-pwa/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -38,12 +33,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install Dependencies
         working-directory: ./client-pwa
-        run: npm install
+        run: |
+          rm -f package-lock.json
+          npm install
 
       - name: Build Web
         working-directory: ./client-pwa
@@ -67,7 +62,7 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
-      
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
@@ -89,8 +84,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: panel-admin/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -100,12 +93,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install Dependencies
         working-directory: ./panel-admin
-        run: npm install
+        run: |
+          rm -f package-lock.json
+          npm install
 
       - name: Build Web
         working-directory: ./panel-admin
@@ -129,7 +122,7 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
-      
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
@@ -151,8 +144,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: dashboard-restaurant/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -162,12 +153,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install Dependencies
         working-directory: ./dashboard-restaurant
-        run: npm install
+        run: |
+          rm -f package-lock.json
+          npm install
 
       - name: Build Web
         working-directory: ./dashboard-restaurant
@@ -213,8 +204,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: app-livreur/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -224,26 +213,24 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
-      
+
       - name: Install Dependencies
         working-directory: ./app-livreur
         run: npm install
-      
+
       - name: Clean and Prebuild
         working-directory: ./app-livreur
         run: |
           rm -rf android
           npx expo prebuild --platform android --clean
-      
+
       - name: Build APK
         working-directory: ./app-livreur/android
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug
-      
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
@@ -261,15 +248,15 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Download APKs
         uses: actions/download-artifact@v4
         with:
           path: ./apks
-      
+
       - name: List Artifacts
         run: ls -la ./apks/
-      
+
       - name: Prepare Release
         run: |
           mkdir -p releases
@@ -281,7 +268,7 @@ jobs:
             fi
           done
           ls -la releases/
-      
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: hashFiles('releases/*.apk') != ''
@@ -290,13 +277,13 @@ jobs:
           name: SenFood Release v${{ github.run_number }}
           body: |
             ## SenFood v${{ github.run_number }}
-            
+
             ### APKs générés :
-            - SenFood Client (PWA)
-            - SenFood Restaurant (Dashboard)
-            - SenFood Admin (Panel)
-            - SenFood Livreur (Expo)
-            
+            - 📱 SenFood Client (PWA)
+            - 🍽️ SenFood Restaurant (Dashboard)
+            - ⚙️ SenFood Admin (Panel)
+            - 🛵 SenFood Livreur (Expo)
+
             ### Installation
             1. Téléchargez les APKs ci-dessous
             2. Activez "Sources inconnues" dans les paramètres Android

@@ -7,22 +7,17 @@ on:
     paths:
       - 'app-livreur/**'
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
 jobs:
   build-livreur:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: app-livreur/package-lock.json
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -31,47 +26,26 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
-      
+
       - name: Install Dependencies
         working-directory: ./app-livreur
         run: npm install
-      
+
       - name: Clean and Prebuild
         working-directory: ./app-livreur
         run: |
           rm -rf android
           npx expo prebuild --platform android --clean
-      
+
       - name: Build APK
         working-directory: ./app-livreur/android
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug
-      
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: senfood-livreur-apk
           path: app-livreur/android/app/build/outputs/apk/debug/app-debug.apk
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main'
-        with:
-          tag_name: livreur-v${{ github.run_number }}
-          name: SenFood Livreur v${{ github.run_number }}
-          body: |
-            ## SenFood Livreur APK
-            
-            Version ${{ github.run_number }}
-            
-            ### Installation
-            1. Téléchargez l'APK ci-dessous
-            2. Activez "Sources inconnues" dans les paramètres Android
-            3. Installez l'APK
-          files: app-livreur/android/app/build/outputs/apk/debug/app-debug.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
