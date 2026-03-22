@@ -22,43 +22,45 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: client-pwa/package-lock.json
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
-      
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-      
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
       - name: Install Dependencies
         working-directory: ./client-pwa
         run: npm install
-      
+
       - name: Build Web
         working-directory: ./client-pwa
         run: npm run build
-      
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+
       - name: Clean and Add Android
         working-directory: ./client-pwa
         run: |
           rm -rf android
           npx cap add android
-      
+
       - name: Sync Capacitor
         working-directory: ./client-pwa
         run: npx cap sync android
-      
+
       - name: Build APK
         working-directory: ./client-pwa/android
         run: |
@@ -82,43 +84,45 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: panel-admin/package-lock.json
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
-      
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-      
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
       - name: Install Dependencies
         working-directory: ./panel-admin
         run: npm install
-      
+
       - name: Build Web
         working-directory: ./panel-admin
         run: npm run build
-      
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+
       - name: Clean and Add Android
         working-directory: ./panel-admin
         run: |
           rm -rf android
           npx cap add android
-      
+
       - name: Sync Capacitor
         working-directory: ./panel-admin
         run: npx cap sync android
-      
+
       - name: Build APK
         working-directory: ./panel-admin/android
         run: |
@@ -153,13 +157,13 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install Dependencies
         working-directory: ./dashboard-restaurant
@@ -168,6 +172,8 @@ jobs:
       - name: Build Web
         working-directory: ./dashboard-restaurant
         run: npm run build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
 
       - name: Clean and Add Android
         working-directory: ./dashboard-restaurant
@@ -202,24 +208,24 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: app-livreur/package-lock.json
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
-      
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       
       - name: Install Dependencies
         working-directory: ./app-livreur
