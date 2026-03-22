@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const { pool, initDatabase } = require('./config/database');
@@ -18,20 +19,39 @@ const clientRoutes = require('./routes/client');
 const restaurantRoutes = require('./routes/restaurant');
 const livreurRoutes = require('./routes/livreur');
 const adminRoutes = require('./routes/admin');
+const notificationRoutes = require('./routes/notifications');
+const ratingRoutes = require('./routes/ratings');
+const favoriteRoutes = require('./routes/favorites');
+const promotionRoutes = require('./routes/promotions');
+const addressRoutes = require('./routes/addresses');
+const chatRoutes = require('./routes/chat');
+const loyaltyRoutes = require('./routes/loyalty');
 
 const app = express();
 const server = http.createServer(app);
+
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,http://localhost:5175').split(',');
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
 });
 
 const PORT = process.env.PORT || 5000;
 
+// Rate limiting sur les routes auth
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Middleware
-app.use(cors());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // Attacher io aux requêtes pour les notifications
@@ -53,8 +73,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Auth routes (publiques)
-app.use('/api/auth', authRoutes);
+// Auth routes (publiques, avec rate limiting)
+app.use('/api/auth', authLimiter, authRoutes);
 
 // Client routes
 app.use('/api/client', clientRoutes);
@@ -67,6 +87,27 @@ app.use('/api/livreur', livreurRoutes);
 
 // Admin routes
 app.use('/api/admin', adminRoutes);
+
+// Notifications routes
+app.use('/api/notifications', notificationRoutes);
+
+// Ratings routes
+app.use('/api/ratings', ratingRoutes);
+
+// Favorites routes
+app.use('/api/favorites', favoriteRoutes);
+
+// Promotions routes
+app.use('/api/promotions', promotionRoutes);
+
+// Addresses routes
+app.use('/api/addresses', addressRoutes);
+
+// Chat routes
+app.use('/api/chat', chatRoutes);
+
+// Loyalty routes
+app.use('/api/loyalty', loyaltyRoutes);
 
 // ==========================================
 // 🔌 SOCKET.IO - Temps Réel
@@ -119,7 +160,13 @@ io.on('connection', (socket) => {
     if (socket.user.role !== 'livreur') return;
 
     const { latitude, longitude, orderId } = data;
-    
+
+    // Validation des coordonnées
+    if (typeof latitude !== 'number' || typeof longitude !== 'number' ||
+        latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return;
+    }
+
     try {
       // Mettre à jour la position en DB
       await pool.query(

@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { addOrderPoints } = require('./loyalty');
 
 const router = express.Router();
 
@@ -113,6 +114,21 @@ router.post('/orders/:id/accept', async (req, res) => {
 
       await client.query('COMMIT');
 
+      // Émettre via Socket.IO
+      if (req.io) {
+        req.io.to(`user_${order.client_id}`).emit('order_status_changed', {
+          orderId: parseInt(id),
+          status: 'en_route',
+          courierName: req.user.name,
+          timestamp: new Date().toISOString(),
+        });
+        req.io.to(`user_${order.restaurant_id}`).emit('order_status_changed', {
+          orderId: parseInt(id),
+          status: 'en_route',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       res.json({ message: 'Commande acceptée', order_id: id });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -172,12 +188,33 @@ router.post('/orders/:id/complete', async (req, res) => {
       [id]
     );
 
+    // Ajouter des points de fidélité au client
+    try {
+      await addOrderPoints(order.client_id, id, order.total_amount);
+    } catch (loyaltyErr) {
+      console.error('Loyalty points error (non-blocking):', loyaltyErr);
+    }
+
     // Notifier le client et le restaurant
     await pool.query(
       `INSERT INTO notifications (user_id, type, title, message, data)
        VALUES ($1, 'order_delivered', 'Commande livrée', 'Votre commande a été livrée avec succès', $2)`,
       [order.client_id, JSON.stringify({ order_id: id })]
     );
+
+    // Émettre via Socket.IO
+    if (req.io) {
+      req.io.to(`user_${order.client_id}`).emit('order_status_changed', {
+        orderId: parseInt(id),
+        status: 'livree',
+        timestamp: new Date().toISOString(),
+      });
+      req.io.to(`user_${order.restaurant_id}`).emit('order_status_changed', {
+        orderId: parseInt(id),
+        status: 'livree',
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     res.json({ message: 'Commande marquée comme livrée' });
   } catch (err) {

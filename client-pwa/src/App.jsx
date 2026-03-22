@@ -9,7 +9,14 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState(null); // loading | success | error
-  const [panier, setPanier] = useState([]);
+  const [panier, setPanier] = useState(() => {
+    try { const saved = localStorage.getItem('senfood_panier'); return saved ? JSON.parse(saved) : []; }
+    catch { return []; }
+  });
+  const [promoCode, setPromoCode] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('wave');
 
   const addToPanier = (plat) => {
     setPanier(prev => {
@@ -23,15 +30,38 @@ function App() {
 
   const removeFromPanier = (id) => setPanier(prev => prev.filter(p => p.id !== id));
 
-  const handleWaveOrder = () => {
+  const handlePayment = () => {
     setOrderStatus('loading');
-    // Simuler le paiement Wave
+    // Simuler le paiement (Wave ou Orange Money)
     setTimeout(() => {
       setPanier([]);
+      setPromoCode('');
+      setPromoDiscount(0);
+      setPromoApplied(false);
       setOrderStatus('success');
       setActivePage('commandes');
       setTimeout(() => setOrderStatus(null), 3000);
     }, 2000);
+  };
+
+  // Persist cart to localStorage
+  useEffect(() => {
+    localStorage.setItem('senfood_panier', JSON.stringify(panier));
+  }, [panier]);
+
+  const applyPromoCode = () => {
+    const code = promoCode.trim().toUpperCase();
+    if (code === 'BIENVENUE') {
+      setPromoDiscount(Math.round(totalPanier * 0.1));
+      setPromoApplied(true);
+    } else if (code === 'SENFOOD') {
+      setPromoDiscount(500);
+      setPromoApplied(true);
+    } else {
+      setPromoDiscount(0);
+      setPromoApplied(false);
+      alert('Code promo invalide');
+    }
   };
 
   const totalPanier = panier.reduce((acc, p) => acc + (p.price * p.qty), 0);
@@ -165,8 +195,12 @@ function App() {
           {orderStatus === 'loading' && (
             <div className="bg-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-100">
                <div className="w-5 h-5 rounded-full border-4 border-t-primary border-l-primary border-b-gray-200 border-r-gray-200 animate-spin"></div>
-               <img src="/wave-logo.png" className="h-5 object-contain" alt="Wave"/>
-               <span className="font-bold text-gray-800">Paiement Wave en cours...</span>
+               {paymentMethod === 'wave' ? (
+                 <img src="/wave-logo.png" className="h-5 object-contain" alt="Wave"/>
+               ) : (
+                 <span className="text-lg">🟠</span>
+               )}
+               <span className="font-bold text-gray-800">Paiement {paymentMethod === 'wave' ? 'Wave' : 'Orange Money'} en cours...</span>
             </div>
           )}
           {orderStatus === 'success' && (
@@ -409,6 +443,33 @@ function App() {
                 ))}
               </div>
 
+              {/* Code Promo */}
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-4">
+                <h4 className="font-bold text-gray-900 mb-3">Code promo</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder="Entrez votre code"
+                    className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                  <button
+                    onClick={applyPromoCode}
+                    className="bg-secondary text-white font-bold px-5 py-3 rounded-xl hover:bg-gray-800 transition-colors text-sm"
+                  >
+                    Appliquer
+                  </button>
+                </div>
+                {promoApplied && (
+                  <div className="mt-3 flex items-center gap-2 text-green-600 text-sm font-bold">
+                    <span>✅</span>
+                    <span>Code "{promoCode.toUpperCase()}" appliqué : -{promoDiscount.toLocaleString()} FCFA</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Résumé de paiement */}
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-600 font-medium">Sous-total</span>
@@ -418,21 +479,55 @@ function App() {
                   <span className="text-gray-600 font-medium">Livraison</span>
                   <span className="font-bold text-green-600">Gratuite</span>
                 </div>
+                <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  <span className="font-medium">Temps estimé: 25-35 min</span>
+                </div>
+                {promoApplied && (
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-green-600 font-medium">Réduction promo</span>
+                    <span className="font-bold text-green-600">-{promoDiscount.toLocaleString()} FCFA</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-4 border-t border-gray-100 mb-6">
                   <span className="text-xl font-black text-gray-900">Total</span>
-                  <span className="text-2xl font-black text-primary">{totalPanier.toLocaleString()} FCFA</span>
+                  <span className="text-2xl font-black text-primary">{(totalPanier - promoDiscount).toLocaleString()} FCFA</span>
                 </div>
+
+                {/* Choix du moyen de paiement */}
+                <div className="mb-4">
+                  <p className="text-sm font-bold text-gray-700 mb-3">Moyen de paiement</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setPaymentMethod('wave')}
+                      className={`flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border-2 transition-all font-bold text-sm ${paymentMethod === 'wave' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    >
+                      <img src="/wave-logo.png" className="h-5 object-contain rounded" alt="Wave"/>
+                      Wave
+                    </button>
+                    <button
+                      onClick={() => setPaymentMethod('orange_money')}
+                      className={`flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border-2 transition-all font-bold text-sm ${paymentMethod === 'orange_money' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    >
+                      <span className="text-lg">🟠</span>
+                      Orange Money
+                    </button>
+                  </div>
+                </div>
+
                 <button
-                  onClick={handleWaveOrder}
+                  onClick={handlePayment}
                   disabled={orderStatus === 'loading'}
                   className="w-full bg-primary hover:bg-orange-600 disabled:opacity-70 text-white font-black py-5 rounded-2xl text-lg transition-all shadow-xl shadow-primary/30 flex items-center justify-center gap-3"
                 >
                   {orderStatus === 'loading' ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
+                  ) : paymentMethod === 'wave' ? (
                     <img src="/wave-logo.png" className="h-8 object-contain rounded" alt="Wave"/>
+                  ) : (
+                    <span className="text-2xl">🟠</span>
                   )}
-                  {orderStatus === 'loading' ? 'Paiement en cours...' : 'Payer avec Wave'}
+                  {orderStatus === 'loading' ? 'Paiement en cours...' : `Payer avec ${paymentMethod === 'wave' ? 'Wave' : 'Orange Money'}`}
                 </button>
               </div>
             </>
@@ -452,9 +547,9 @@ function App() {
           <h2 className="text-3xl font-black text-gray-900 mb-8">Mes Commandes 📦</h2>
           <div className="space-y-4">
             {[
-              { id:'#1045', name:'Tiep Bou Dien Rouge', status:'En livraison 🏍️', time:'Dans 15 min', amount:'3 000 FCFA', color:'blue' },
-              { id:'#1044', name:'Double Cheese Burger', status:'En préparation 👨‍🍳', time:'Il y a 30 min', amount:'5 500 FCFA', color:'orange' },
-              { id:'#1043', name:'Yassa Poulet', status:'Livré ✅', time:'Hier', amount:'3 500 FCFA', color:'green' },
+              { id:'#1045', name:'Tiep Bou Dien Rouge', status:'En livraison 🏍️', time:'Dans 15 min', amount:'3 000 FCFA', color:'blue', items:[{ id:2, name:'Tiep Bou Dien Rouge', price:3000, image_url:'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&q=80', restaurant_name:'Chef Ousmane (Dark Kitchen)' }] },
+              { id:'#1044', name:'Double Cheese Burger', status:'En préparation 👨‍🍳', time:'Il y a 30 min', amount:'5 500 FCFA', color:'orange', items:[{ id:19, name:'Double Cheese Burger', price:5500, image_url:'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80', restaurant_name:'Sen Burger Dakar' }] },
+              { id:'#1043', name:'Yassa Poulet', status:'Livré ✅', time:'Hier', amount:'3 500 FCFA', color:'green', items:[{ id:6, name:'Yassa Poulet', price:3500, image_url:'https://images.unsplash.com/photo-1598103442097-8b74394b95c8?w=500&q=80', restaurant_name:'Chef Ousmane (Dark Kitchen)' }] },
             ].map(order => (
               <div key={order.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
                 <div className="flex justify-between items-start mb-3">
@@ -468,6 +563,18 @@ function App() {
                   <span className="text-gray-400 text-sm">{order.time}</span>
                   <span className="font-black text-primary">{order.amount}</span>
                 </div>
+                {order.status === 'Livré ✅' && (
+                  <button
+                    onClick={() => {
+                      order.items.forEach(item => addToPanier({ ...item, qty: 1 }));
+                      setActivePage('panier');
+                    }}
+                    className="mt-4 w-full bg-secondary hover:bg-gray-800 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Re-commander
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -493,6 +600,45 @@ function App() {
               <div><p className="text-2xl font-black text-secondary">2</p><p className="text-xs text-gray-400">Favoris</p></div>
             </div>
           </div>
+          {/* Carte de fidélité */}
+          <div className="bg-gradient-to-r from-secondary via-slate-800 to-gray-900 rounded-3xl p-6 mb-6 text-white shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🏆</span>
+                <div>
+                  <h3 className="font-black text-lg">Carte Fidélité</h3>
+                  <p className="text-gray-400 text-sm font-medium">Niveau Bronze</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-black text-primary">1 250</p>
+                <p className="text-xs text-gray-400 font-medium">points</p>
+              </div>
+            </div>
+            <div className="mb-2">
+              <div className="flex justify-between text-xs font-bold text-gray-400 mb-1">
+                <span>Bronze</span>
+                <span>Silver (2 500 pts)</span>
+              </div>
+              <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
+                <div className="bg-primary h-full rounded-full transition-all" style={{ width: '50%' }}></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Encore 1 250 pts pour atteindre Silver</p>
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-400 font-medium">Code de parrainage</p>
+                <p className="font-black text-primary text-lg tracking-wider">OUMY2026</p>
+              </div>
+              <button
+                onClick={() => { navigator.clipboard.writeText('OUMY2026'); }}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-4 py-2 rounded-xl transition-colors"
+              >
+                Copier
+              </button>
+            </div>
+          </div>
+
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             {[
               { icon:'📍', label:'Adresse de livraison', value:'Plateau, Dakar' },

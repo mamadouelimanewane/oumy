@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { paginate, paginatedResponse } = require('../middleware/pagination');
 
 const router = express.Router();
 
@@ -60,34 +61,51 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// Liste des restaurants
+// Liste des restaurants (paginé)
 router.get('/restaurants', async (req, res) => {
   try {
+    const { page, limit, offset } = paginate(req.query);
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM users WHERE role = 'restaurant'`
+    );
+
     const result = await pool.query(
-      `SELECT u.*, 
+      `SELECT u.id, u.name, u.phone, u.email, u.address, u.is_active, u.created_at,
+              u.latitude, u.longitude,
               COUNT(DISTINCT m.id) as menu_count,
               COUNT(DISTINCT o.id) as total_orders,
-              COALESCE(SUM(o.total_amount), 0) as total_revenue
+              COALESCE(SUM(o.total_amount), 0) as total_revenue,
+              COALESCE(ROUND(AVG(rt.rating), 1), 0) as avg_rating
        FROM users u
        LEFT JOIN menu_items m ON m.restaurant_id = u.id
        LEFT JOIN orders o ON o.restaurant_id = u.id AND o.status = 'livree'
+       LEFT JOIN ratings rt ON rt.restaurant_id = u.id
        WHERE u.role = 'restaurant'
        GROUP BY u.id
-       ORDER BY u.created_at DESC`
+       ORDER BY u.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
-    res.json(result.rows);
+    res.json(paginatedResponse(result.rows, countResult.rows[0].total, { page, limit }));
   } catch (err) {
     console.error('Get admin restaurants error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// Liste des livreurs
+// Liste des livreurs (paginé)
 router.get('/couriers', async (req, res) => {
   try {
+    const { page, limit, offset } = paginate(req.query);
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM users WHERE role = 'livreur'`
+    );
+
     const result = await pool.query(
-      `SELECT u.*, 
+      `SELECT u.id, u.name, u.phone, u.email, u.address, u.is_active, u.created_at,
               COUNT(DISTINCT o.id) as total_deliveries,
               COALESCE(SUM(o.total_amount), 0) as total_amount,
               cl.latitude, cl.longitude, cl.updated_at as last_location
@@ -96,31 +114,41 @@ router.get('/couriers', async (req, res) => {
        LEFT JOIN courier_locations cl ON cl.courier_id = u.id
        WHERE u.role = 'livreur'
        GROUP BY u.id, cl.latitude, cl.longitude, cl.updated_at
-       ORDER BY u.created_at DESC`
+       ORDER BY u.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
-    res.json(result.rows);
+    res.json(paginatedResponse(result.rows, countResult.rows[0].total, { page, limit }));
   } catch (err) {
     console.error('Get admin couriers error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// Liste des clients
+// Liste des clients (paginé)
 router.get('/clients', async (req, res) => {
   try {
+    const { page, limit, offset } = paginate(req.query);
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM users WHERE role = 'client'`
+    );
+
     const result = await pool.query(
-      `SELECT u.*, 
+      `SELECT u.id, u.name, u.phone, u.email, u.address, u.is_active, u.created_at,
               COUNT(DISTINCT o.id) as total_orders,
               COALESCE(SUM(o.total_amount), 0) as total_spent
        FROM users u
        LEFT JOIN orders o ON o.client_id = u.id
        WHERE u.role = 'client'
        GROUP BY u.id
-       ORDER BY u.created_at DESC`
+       ORDER BY u.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
-    res.json(result.rows);
+    res.json(paginatedResponse(result.rows, countResult.rows[0].total, { page, limit }));
   } catch (err) {
     console.error('Get admin clients error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -168,10 +196,41 @@ router.get('/orders', async (req, res) => {
       paramIndex++;
     }
 
-    query += ' ORDER BY o.created_at DESC';
+    // Count query utilise les mêmes paramètres
+    let countQuery = `SELECT COUNT(*) as total FROM orders o WHERE 1=1`;
+    const countParams = [];
+    let countIdx = 1;
+
+    if (status) {
+      countQuery += ` AND o.status = $${countIdx}`;
+      countParams.push(status);
+      countIdx++;
+    }
+    if (restaurant_id) {
+      countQuery += ` AND o.restaurant_id = $${countIdx}`;
+      countParams.push(restaurant_id);
+      countIdx++;
+    }
+    if (start_date) {
+      countQuery += ` AND DATE(o.created_at) >= $${countIdx}`;
+      countParams.push(start_date);
+      countIdx++;
+    }
+    if (end_date) {
+      countQuery += ` AND DATE(o.created_at) <= $${countIdx}`;
+      countParams.push(end_date);
+      countIdx++;
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+
+    const { page, limit, offset } = paginate(req.query);
+
+    query += ` ORDER BY o.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
 
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json(paginatedResponse(result.rows, countResult.rows[0].total, { page, limit }));
   } catch (err) {
     console.error('Get admin orders error:', err);
     res.status(500).json({ error: 'Erreur serveur' });

@@ -110,6 +110,15 @@ router.put('/orders/:id/status', [
       [order.client_id, statusMessages[status], JSON.stringify({ order_id: id, status })]
     );
 
+    // Émettre via Socket.IO vers le client
+    if (req.io) {
+      req.io.to(`user_${order.client_id}`).emit('order_status_changed', {
+        orderId: parseInt(id),
+        status,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     res.json({
       message: 'Statut mis à jour',
       order: result.rows[0],
@@ -285,6 +294,178 @@ router.get('/stats', async (req, res) => {
     });
   } catch (err) {
     console.error('Get stats error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Récupérer les horaires du restaurant
+router.get('/hours', async (req, res) => {
+  try {
+    const restaurantId = req.user.role === 'admin' ? req.query.restaurant_id : req.user.id;
+
+    const result = await pool.query(
+      `SELECT id, day_of_week, open_time, close_time
+       FROM restaurant_hours
+       WHERE restaurant_id = $1
+       ORDER BY day_of_week`,
+      [restaurantId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get hours error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Mettre à jour les horaires (tableau de jours)
+router.put('/hours', [
+  body('hours').isArray().withMessage('Tableau d\'horaires requis'),
+  body('hours.*.day_of_week').isInt({ min: 0, max: 6 }).withMessage('Jour invalide (0-6)'),
+  body('hours.*.open_time').matches(/^\d{2}:\d{2}$/).withMessage('Format heure invalide (HH:MM)'),
+  body('hours.*.close_time').matches(/^\d{2}:\d{2}$/).withMessage('Format heure invalide (HH:MM)'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const restaurantId = req.user.role === 'admin' ? req.body.restaurant_id : req.user.id;
+    const { hours } = req.body;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Supprimer les horaires existants
+      await client.query(
+        'DELETE FROM restaurant_hours WHERE restaurant_id = $1',
+        [restaurantId]
+      );
+
+      // Insérer les nouveaux horaires
+      for (const h of hours) {
+        await client.query(
+          `INSERT INTO restaurant_hours (restaurant_id, day_of_week, open_time, close_time)
+           VALUES ($1, $2, $3, $4)`,
+          [restaurantId, h.day_of_week, h.open_time, h.close_time]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.json({ message: 'Horaires mis à jour avec succès' });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Update hours error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Analytique détaillée (graphiques Chart.js)
+router.get('/analytics', async (req, res) => {
+  try {
+    const restaurantId = req.user.role === 'admin' ? req.query.restaurant_id : req.user.id;
+    const { period } = req.query; // '7d', '30d', '90d'
+
+    const days = period === '90d' ? 90 : period === '30d' ? 30 : 7;
+
+    // Revenus par jour
+    const revenueByDay = await pool.query(
+      `SELECT DATE(created_at) as date,
+              COUNT(*) as orders,
+              COALESCE(SUM(total_amount), 0) as revenue
+       FROM orders
+       WHERE restaurant_id = $1 AND status = 'livree'
+       AND created_at >= CURRENT_DATE - $2 * INTERVAL '1 day'
+       GROUP BY DATE(created_at)
+       ORDER BY date`,
+      [restaurantId, days]
+    );
+
+    // Top plats vendus
+    const topDishes = await pool.query(
+      `SELECT m.name, SUM(oi.quantity) as total_sold,
+              SUM(oi.quantity * oi.price_at_time) as total_revenue
+       FROM order_items oi
+       JOIN menu_items m ON oi.menu_item_id = m.id
+       JOIN orders o ON oi.order_id = o.id
+       WHERE o.restaurant_id = $1 AND o.status = 'livree'
+       AND o.created_at >= CURRENT_DATE - $2 * INTERVAL '1 day'
+       GROUP BY m.id, m.name
+       ORDER BY total_sold DESC
+       LIMIT 10`,
+      [restaurantId, days]
+    );
+
+    // Heures de pointe
+    const peakHours = await pool.query(
+      `SELECT EXTRACT(HOUR FROM created_at) as hour,
+              COUNT(*) as order_count
+       FROM orders
+       WHERE restaurant_id = $1 AND status = 'livree'
+       AND created_at >= CURRENT_DATE - $2 * INTERVAL '1 day'
+       GROUP BY EXTRACT(HOUR FROM created_at)
+       ORDER BY hour`,
+      [restaurantId, days]
+    );
+
+    // Répartition par moyen de paiement
+    const paymentMethods = await pool.query(
+      `SELECT payment_method, COUNT(*) as count,
+              COALESCE(SUM(total_amount), 0) as total
+       FROM orders
+       WHERE restaurant_id = $1 AND status = 'livree'
+       AND created_at >= CURRENT_DATE - $2 * INTERVAL '1 day'
+       GROUP BY payment_method`,
+      [restaurantId, days]
+    );
+
+    res.json({
+      period: `${days}d`,
+      revenue_by_day: revenueByDay.rows,
+      top_dishes: topDishes.rows,
+      peak_hours: peakHours.rows,
+      payment_methods: paymentMethods.rows,
+    });
+  } catch (err) {
+    console.error('Get analytics error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Gérer le menu du jour (plats temporaires)
+router.post('/menu/:id/schedule', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { available_from, available_until } = req.body;
+    const restaurantId = req.user.role === 'admin' ? null : req.user.id;
+
+    let query = 'SELECT id FROM menu_items WHERE id = $1';
+    const params = [id];
+    if (restaurantId) {
+      query += ' AND restaurant_id = $2';
+      params.push(restaurantId);
+    }
+
+    const check = await pool.query(query, params);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Plat non trouvé' });
+    }
+
+    const result = await pool.query(
+      `UPDATE menu_items SET available_from = $1, available_until = $2 WHERE id = $3 RETURNING *`,
+      [available_from || null, available_until || null, id]
+    );
+
+    res.json({ message: 'Disponibilité programmée', item: result.rows[0] });
+  } catch (err) {
+    console.error('Schedule menu item error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
