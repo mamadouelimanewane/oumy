@@ -127,7 +127,7 @@ function App() {
     setLoading(false);
 
     // On tente en parallèle de récupérer les données live du serveur
-    const apiUrl = 'https://senfood-api-final-2026.loca.lt/api/client/plats';
+    const apiUrl = '/api/client/plats';
     fetch(apiUrl, { headers: { 'bypass-tunnel-reminder': 'true' }, signal: AbortSignal.timeout(5000) })
       .then(res => res.json())
       .then(data => {

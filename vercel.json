@@ -2,6 +2,10 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/backend/server.js"
+    },
+    {
       "source": "/admin/(.*)",
       "destination": "/admin/index.html"
     },
