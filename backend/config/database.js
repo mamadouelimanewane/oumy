@@ -13,6 +13,9 @@ let pool;
 let initDatabase;
 
 if (USE_POSTGRES) {
+  // Désactive la vérification stricte du certificat SSL pour Supabase/Vercel
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  
   // ===== MODE POSTGRESQL (Production/Supabase/Vercel) =====
   const { Pool } = require('pg');
   
@@ -20,8 +23,12 @@ if (USE_POSTGRES) {
     // Connexion via URI complète (Auto-détecté par pg Pool)
     pool = new Pool({
       connectionString: CONNECTION_STRING,
-      ssl: { rejectUnauthorized: false }, // Requis pour Supabase/Cloud
-      max: 20, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
     });
   } else {
     // Connexion via paramètres séparés
