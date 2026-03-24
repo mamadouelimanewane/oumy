@@ -1,5 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : 'https://oumy-qzik4f507-mamadou-dias-projects-979b1f4f.vercel.app/api');
-export const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://oumy-qzik4f507-mamadou-dias-projects-979b1f4f.vercel.app';
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+export const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
 
 // Helper pour les requêtes API
 const fetchWithAuth = async (endpoint, options = {}) => {
