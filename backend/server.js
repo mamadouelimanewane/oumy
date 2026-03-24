@@ -291,14 +291,15 @@ app.set('io', io);
 
 const startServer = async () => {
   try {
-    await initDatabase();
-    
-    server.listen(PORT, () => {
-      console.log(`🚀 API SenFood lancée sur http://localhost:${PORT}`);
-      console.log(`📡 Socket.IO actif pour temps réel`);
-      console.log(`🔐 JWT Authentication activée`);
-      console.log(`🐘 PostgreSQL connecté`);
-    });
+    if (!process.env.VERCEL) {
+      await initDatabase();
+      server.listen(PORT, () => {
+        console.log(`🚀 API SenFood lancée sur http://localhost:${PORT}`);
+        console.log(`📡 Socket.IO actif pour temps réel`);
+        console.log(`🔐 JWT Authentication activée`);
+        console.log(`🐘 PostgreSQL connecté`);
+      });
+    }
   } catch (err) {
     console.error('❌ Erreur démarrage serveur:', err);
     process.exit(1);
@@ -307,4 +308,5 @@ const startServer = async () => {
 
 startServer();
 
-module.exports = { sendNotification };
+// Exporter l'application Express pour le Serverless Vercel
+module.exports = app;
