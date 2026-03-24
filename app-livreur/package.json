@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
+    "@mapbox/polyline": "^1.2.1",
     "@react-native-community/geolocation": "^3.4.0",
     "axios": "^1.13.6",
     "expo": "~55.0.6",
