@@ -22,7 +22,8 @@ import {
   CalendarClock,
   Loader2,
   X,
-  Save
+  Save,
+  Menu
 } from 'lucide-react';
 import { authAPI, restaurantAPI, notificationsAPI, createSocketConnection } from './api';
 
@@ -118,6 +119,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('commandes');
   const [socket, setSocket] = useState(null);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Data states
   const [orders, setOrders] = useState([]);
@@ -125,6 +127,7 @@ function App() {
   const [stats, setStats] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const [courierLocs, setCourierLocs] = useState({});
 
   // Menu form modal
   const [showMenuForm, setShowMenuForm] = useState(false);
@@ -174,6 +177,13 @@ function App() {
 
       s.on('rating_received', (data) => {
         fetchStats();
+      });
+
+      s.on('courier_location_update', (data) => {
+        setCourierLocs(prev => ({
+          ...prev,
+          [data.courierId]: { lat: data.latitude, lng: data.longitude, orderId: data.orderId }
+        }));
       });
     });
 
@@ -353,49 +363,47 @@ function App() {
   const preteOrders = orders.filter(o => o.status === 'prete');
 
   return (
-    <div className="min-h-screen bg-slate-50 flex overflow-hidden">
+    <div className="min-h-screen bg-slate-50 flex overflow-hidden relative">
+
+      {/* MOBILE MENU OVERLAY */}
+      {showMobileMenu && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-30 md:hidden"
+          onClick={() => setShowMobileMenu(false)}
+        />
+      )}
 
       {/* SIDEBAR */}
-      <aside className="w-64 bg-secondary text-white hidden md:flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-white/10">
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-secondary text-white flex flex-col transform transition-transform duration-300 ease-in-out ${showMobileMenu ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
+        <div className="h-16 flex items-center px-6 border-b border-white/10 relative">
           <Utensils className="w-6 h-6 text-indigo-400 mr-2" />
           <span className="text-xl font-bold tracking-tight">SenFood <span className="text-indigo-400">Resto</span></span>
+          <button className="md:hidden ml-auto p-2 text-white/60" onClick={() => setShowMobileMenu(false)}>
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
         <div className="p-4 flex-1">
           <div className="mb-8">
             <p className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Menu Principal</p>
             <nav className="space-y-1">
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`w-full flex items-center px-4 py-3 rounded-xl transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600/20 text-indigo-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'}`}
-              >
-                <LayoutDashboard className="w-5 h-5 mr-3" />
-                <span className="font-medium">Tableau de bord</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('commandes')}
-                className={`w-full flex items-center px-4 py-3 rounded-xl transition-colors relative ${activeTab === 'commandes' ? 'bg-indigo-600/20 text-indigo-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'}`}
-              >
-                <BellRing className="w-5 h-5 mr-3" />
-                <span className="font-medium">Commandes Live</span>
-                {nouvelleOrders.length > 0 && <span className="absolute right-4 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>}
-                {nouvelleOrders.length > 0 && <span className="absolute right-4 w-3 h-3 bg-red-500 rounded-full"></span>}
-              </button>
-              <button
-                onClick={() => setActiveTab('menu')}
-                className={`w-full flex items-center px-4 py-3 rounded-xl transition-colors ${activeTab === 'menu' ? 'bg-indigo-600/20 text-indigo-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'}`}
-              >
-                <Package className="w-5 h-5 mr-3" />
-                <span className="font-medium">Menu & Plats</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('horaires')}
-                className={`w-full flex items-center px-4 py-3 rounded-xl transition-colors ${activeTab === 'horaires' ? 'bg-indigo-600/20 text-indigo-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'}`}
-              >
-                <CalendarClock className="w-5 h-5 mr-3" />
-                <span className="font-medium">Horaires</span>
-              </button>
+              {[
+                { id: 'dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
+                { id: 'commandes', icon: BellRing, label: 'Commandes Live', badge: nouvelleOrders.length > 0 },
+                { id: 'flotte', icon: Bike, label: 'Suivi Flotte' },
+                { id: 'menu', icon: Package, label: 'Menu & Plats' },
+                { id: 'horaires', icon: CalendarClock, label: 'Horaires' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => { setActiveTab(tab.id); setShowMobileMenu(false); }}
+                  className={`w-full flex items-center px-4 py-3 rounded-xl transition-colors relative ${activeTab === tab.id ? 'bg-indigo-600/20 text-indigo-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'}`}
+                >
+                  <tab.icon className="w-5 h-5 mr-3" />
+                  <span className="font-medium">{tab.label}</span>
+                  {tab.badge && <span className="absolute right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
+                </button>
+              ))}
             </nav>
           </div>
         </div>
@@ -404,8 +412,8 @@ function App() {
           <div className="flex items-center px-4 py-3">
             <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=4F46E5&color=fff`} alt="Avatar" className="w-10 h-10 rounded-full mr-3 border-2 border-slate-700" />
             <div className="overflow-hidden">
-              <p className="text-sm font-semibold text-white truncate">{user.name}</p>
-              <p className="text-xs text-green-400 flex items-center"><span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span> Connecté</p>
+              <p className="text-sm font-semibold text-white truncate leading-tight">{user.name}</p>
+              <p className="text-[10px] text-green-400 flex items-center"><span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span> En ligne</p>
             </div>
           </div>
           <button onClick={handleLogout} className="w-full flex items-center px-4 py-2 mt-2 text-sm text-slate-400 hover:text-white transition-colors">
@@ -418,8 +426,11 @@ function App() {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
 
         {/* HEADER */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shrink-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-10 shrink-0">
           <div className="flex items-center flex-1">
+            <button className="md:hidden p-2 mr-3 text-slate-400 hover:text-indigo-600" onClick={() => setShowMobileMenu(true)}>
+              <Menu className="w-6 h-6" />
+            </button>
             <div className="relative w-full max-w-md hidden sm:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -429,16 +440,16 @@ function App() {
               />
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 md:space-x-4">
             {stats && (
-              <p className="text-sm font-medium text-slate-600 hidden sm:block">
+              <p className="text-xs md:text-sm font-medium text-slate-600 hidden sm:block">
                 Aujourd'hui : <span className="text-indigo-600 font-bold">{formatPrice(stats.today?.today_revenue || 0)}</span>
               </p>
             )}
             <button className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-full transition-colors">
               <BellRing className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -447,25 +458,25 @@ function App() {
         </header>
 
         {/* PAGE CONTENT */}
-        <div className="flex-1 overflow-auto p-6 scroll-smooth">
+        <div className="flex-1 overflow-auto p-4 md:p-6 scroll-smooth">
 
           {/* Alerte nouvelle commande */}
           {newOrderAlert && activeTab === 'commandes' && (
-            <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-center justify-between shadow-sm animate-[slideDown_0.3s_ease-out]">
+            <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between shadow-sm animate-[slideDown_0.3s_ease-out] gap-4">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center mr-4">
+                <div className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center mr-4 shrink-0">
                   <BellRing className="w-5 h-5 animate-bounce" />
                 </div>
                 <div>
-                  <h4 className="text-indigo-900 font-bold text-lg">Nouvelle commande entrante !</h4>
+                  <h4 className="text-indigo-900 font-bold md:text-lg">Nouvelle commande entrante !</h4>
                   <p className="text-indigo-700 text-sm">
                     Commande #{newOrderAlert.orderId} {newOrderAlert.total ? `• ${formatPrice(newOrderAlert.total)}` : ''}
                   </p>
                 </div>
               </div>
-              <div className="flex space-x-2">
-                <button className="px-4 py-2 bg-white text-indigo-600 font-bold rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-colors" onClick={() => setNewOrderAlert(null)}>Plus tard</button>
-                <button className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition-all transform hover:scale-105" onClick={() => { handleAcceptOrder(newOrderAlert.orderId); }}>Accepter & Préparer</button>
+              <div className="flex space-x-2 w-full sm:w-auto">
+                <button className="flex-1 sm:flex-none px-4 py-2 bg-white text-indigo-600 font-bold rounded-lg border border-indigo-200 hover:bg-indigo-50" onClick={() => setNewOrderAlert(null)}>Plus tard</button>
+                <button className="flex-1 sm:flex-none px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-600/30" onClick={() => { handleAcceptOrder(newOrderAlert.orderId); }}>Accepter</button>
               </div>
             </div>
           )}
@@ -473,162 +484,146 @@ function App() {
           {/* === ONGLET COMMANDES === */}
           {activeTab === 'commandes' && (
             <>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-slate-800">Commandes en cours</h2>
-                <div className="flex bg-slate-100 p-1 rounded-lg">
-                  <span className="px-4 py-1.5 bg-white shadow-sm rounded-md text-sm font-semibold text-slate-700">Toutes ({orders.length})</span>
-                  <span className="px-4 py-1.5 text-sm font-medium text-slate-500">Nouvelles ({nouvelleOrders.length})</span>
-                  <span className="px-4 py-1.5 text-sm font-medium text-slate-500">En cuisine ({preparationOrders.length})</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800">Commandes Live</h2>
+                <div className="flex bg-slate-100 p-1 rounded-lg self-start">
+                  <span className="px-3 py-1.5 bg-white shadow-sm rounded-md text-[11px] font-semibold text-slate-700">Toutes ({orders.length})</span>
+                  <span className="px-3 py-1.5 text-[11px] font-medium text-slate-500">Nouvelles ({nouvelleOrders.length})</span>
                 </div>
               </div>
 
               {orders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                   <Package className="w-16 h-16 mb-4 opacity-20" />
-                  <p className="text-lg font-medium text-slate-500">Aucune commande en cours</p>
-                  <p className="text-sm mt-2">Les nouvelles commandes apparaîtront ici en temps réel</p>
+                  <p className="text-lg font-medium text-slate-500">Aucune commande</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                   {/* Colonne 1: Nouvelles */}
-                  <div className="bg-slate-100/50 rounded-2xl p-4 border border-slate-200/60">
+                  <div className="bg-white/50 rounded-2xl p-4 border border-slate-200/60 shadow-sm">
                     <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-slate-700 flex items-center"><BellRing className="w-4 h-4 mr-2" /> Nouvelles</h3>
-                      <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-0.5 rounded-full">{nouvelleOrders.length}</span>
+                      <h3 className="font-bold text-slate-700 flex items-center text-sm"><BellRing className="w-4 h-4 mr-2" /> Nouvelles</h3>
+                      <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{nouvelleOrders.length}</span>
                     </div>
 
                     {nouvelleOrders.map(order => (
-                      <div key={order.id} className="bg-white rounded-xl p-4 mb-3 cursor-pointer hover:border-indigo-300 transition-all hover:shadow-md border border-slate-200 border-l-4 border-l-red-500">
+                      <div key={order.id} className="bg-white rounded-xl p-4 mb-3 border border-slate-200 border-l-4 border-l-red-500 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
-                          <span className="text-sm font-bold text-slate-800">#{order.id}</span>
-                          <span className="text-xs font-medium text-slate-500 flex items-center"><Clock className="w-3 h-3 mr-1"/> {formatTime(order.created_at)}</span>
+                          <span className="text-xs font-bold text-slate-800">#{order.id}</span>
+                          <span className="text-[10px] font-medium text-slate-500 flex items-center"><Clock className="w-3 h-3 mr-1"/> {formatTime(order.created_at)}</span>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900 mb-1">{order.client_name}</p>
-                        <p className="text-xs text-slate-500 mb-1">{order.client_phone}</p>
-                        {order.items && (
-                          <p className="text-xs text-slate-500 mb-3">
-                            {order.items.filter(i => i.name).map(i => `${i.quantity}x ${i.name}`).join(', ')}
-                          </p>
-                        )}
-                        <div className="flex justify-between items-center mt-2">
+                        <p className="text-sm font-bold text-slate-900 mb-2 truncate">{order.client_name}</p>
+                        <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg mt-3">
                           <span className="text-sm font-bold text-indigo-600">{formatPrice(order.total_amount)}</span>
-                          <div className="flex space-x-1">
-                            <button onClick={() => handleCancelOrder(order.id)} className="text-red-500 hover:bg-red-50 px-2 py-1.5 rounded text-xs font-bold transition-colors">Refuser</button>
-                            <button onClick={() => handleAcceptOrder(order.id)} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-colors">Accepter</button>
-                          </div>
+                          <button onClick={() => handleAcceptOrder(order.id)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-[11px] font-bold">Accepter</button>
                         </div>
                       </div>
                     ))}
-                    {nouvelleOrders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Aucune nouvelle commande</p>}
+                    {nouvelleOrders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Aucune nouvelle</p>}
                   </div>
 
-                  {/* Colonne 2: En Préparation */}
-                  <div className="bg-slate-100/50 rounded-2xl p-4 border border-slate-200/60">
+                  {/* Colonne 2: Cuisine */}
+                  <div className="bg-white/50 rounded-2xl p-4 border border-slate-200/60 shadow-sm">
                     <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-slate-700 flex items-center"><Utensils className="w-4 h-4 mr-2" /> Cuisine</h3>
-                      <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">{preparationOrders.length}</span>
+                      <h3 className="font-bold text-slate-700 flex items-center text-sm"><Utensils className="w-4 h-4 mr-2" /> Cuisine</h3>
+                      <span className="bg-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{preparationOrders.length}</span>
                     </div>
 
                     {preparationOrders.map(order => (
-                      <div key={order.id} className="bg-white rounded-xl p-4 mb-3 cursor-pointer hover:border-orange-300 transition-all hover:shadow-md border border-slate-200 border-l-4 border-l-orange-500">
+                      <div key={order.id} className="bg-white rounded-xl p-4 mb-3 border border-slate-200 border-l-4 border-l-orange-500 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
-                          <span className="text-sm font-bold text-slate-800">#{order.id}</span>
-                          <span className="text-xs font-medium text-slate-500 flex items-center"><Clock className="w-3 h-3 mr-1"/> {formatTime(order.created_at)}</span>
+                          <span className="text-xs font-bold text-slate-800">#{order.id}</span>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900 mb-1">{order.client_name}</p>
-                        {order.items && (
-                          <p className="text-xs text-slate-500 mb-3">
-                            {order.items.filter(i => i.name).map(i => `${i.quantity}x ${i.name}`).join(', ')}
-                          </p>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-bold text-slate-700">{formatPrice(order.total_amount)}</span>
-                          <button onClick={() => handleMarkReady(order.id)} className="bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-colors">Marquer Prête</button>
+                        <p className="text-sm font-bold text-slate-900 mb-2 truncate">{order.client_name}</p>
+                        <div className="flex justify-between items-center mt-3">
+                          <span className="text-xs font-bold text-slate-600">{formatPrice(order.total_amount)}</span>
+                          <button onClick={() => handleMarkReady(order.id)} className="bg-orange-500 text-white px-3 py-1.5 rounded text-[11px] font-bold">Prête</button>
                         </div>
                       </div>
                     ))}
-                    {preparationOrders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Rien en cuisine</p>}
                   </div>
 
-                  {/* Colonne 3: Prêtes */}
-                  <div className="bg-slate-100/50 rounded-2xl p-4 border border-slate-200/60">
+                  {/* Colonne 3: Attente */}
+                  <div className="bg-white/50 rounded-2xl p-4 border border-slate-200/60 shadow-sm">
                     <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-slate-700 flex items-center"><Bike className="w-4 h-4 mr-2" /> Attente Livreur</h3>
-                      <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">{preteOrders.length}</span>
+                      <h3 className="font-bold text-slate-700 flex items-center text-sm"><Bike className="w-4 h-4 mr-2" /> Livreurs</h3>
+                      <span className="bg-green-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{preteOrders.length}</span>
                     </div>
 
                     {preteOrders.map(order => (
-                      <div key={order.id} className="bg-white rounded-xl p-4 mb-3 cursor-pointer hover:border-green-300 transition-all hover:shadow-md border border-slate-200 border-l-4 border-l-green-500">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-sm font-bold text-slate-800">#{order.id}</span>
-                          <span className="text-xs font-medium text-slate-500 flex items-center"><Clock className="w-3 h-3 mr-1"/> {formatTime(order.created_at)}</span>
+                      <div key={order.id} className="bg-white rounded-xl p-4 mb-3 border border-slate-200 border-l-4 border-l-green-500 shadow-sm">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-xs font-bold text-slate-800">#{order.id}</span>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900 mb-1">{order.client_name}</p>
-                        {order.items && (
-                          <p className="text-xs text-slate-500 mb-3">
-                            {order.items.filter(i => i.name).map(i => `${i.quantity}x ${i.name}`).join(', ')}
-                          </p>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-bold text-slate-700">{formatPrice(order.total_amount)}</span>
-                          <span className="flex items-center text-green-600 bg-green-50 px-3 py-1.5 rounded text-xs font-bold">
-                            <CheckCircle2 className="w-4 h-4 mr-1"/> Prête
-                          </span>
+                        <p className="text-sm font-bold text-slate-900">{order.client_name}</p>
+                        <div className="mt-2 text-green-600 flex items-center text-[11px] font-bold bg-green-50 p-2 rounded-lg">
+                          <CheckCircle2 className="w-4 h-4 mr-1"/> En attente de ramassage
                         </div>
                       </div>
                     ))}
-                    {preteOrders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Aucune commande prête</p>}
                   </div>
                 </div>
               )}
             </>
           )}
 
-          {/* === ONGLET DASHBOARD === */}
-          {activeTab === 'dashboard' && stats && (
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-6">Tableau de bord</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-slate-500">Revenus du jour</span>
-                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold text-slate-800">{formatPrice(stats.today?.today_revenue || 0)}</p>
-                  <p className="text-xs text-slate-400 mt-1">{stats.today?.today_orders || 0} commandes</p>
+          {/* === ONGLET FLOTTE === */}
+          {activeTab === 'flotte' && (
+            <div className="flex flex-col h-full gap-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800">Suivi Flotte (Live)</h2>
+                <div className="flex items-center text-xs font-bold text-green-500 bg-green-50 px-3 py-1.5 rounded-full border border-green-100 animate-pulse">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span> {Object.keys(courierLocs).length} Livreur(s) en ligne
                 </div>
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-slate-500">Revenus totaux</span>
-                    <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                      <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold text-slate-800">{formatPrice(stats.total?.total_revenue || 0)}</p>
-                  <p className="text-xs text-slate-400 mt-1">{stats.total?.total_orders || 0} commandes totales</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-[500px]">
+                <div className="lg:col-span-3 bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200 relative min-h-[400px]">
+                  <iframe 
+                    width="100%" 
+                    height="100%" 
+                    style={{ border: 0 }} 
+                    loading="lazy" 
+                    allowFullScreen 
+                    src={`https://www.google.com/maps/embed/v1/search?key=VOTRE_GOOGLE_MAPS_API_KEY&q=Dakar&zoom=12`}
+                  ></iframe>
                 </div>
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-slate-500">Commandes actives</span>
-                    <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-                      <ShoppingBag className="w-5 h-5 text-orange-600" />
+
+                <div className="space-y-4 overflow-y-auto max-h-[600px] pr-2">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest pl-2">Livreurs actifs</h3>
+                  {Object.entries(courierLocs).length > 0 ? Object.entries(courierLocs).map(([id, loc]) => {
+                    const order = orders.find(o => o.id === loc.orderId);
+                    return (
+                      <div key={id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-indigo-500 transition-colors cursor-pointer group">
+                        <div className="flex items-center gap-3 mb-2">
+                           <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 font-bold">
+                              {id.substring(0,2)}
+                           </div>
+                           <div className="flex-1 min-w-0">
+                              <p className="text-sm font-black text-slate-800 truncate">Livreur #{id.substring(0,5)}</p>
+                              <p className="text-[10px] text-slate-500 font-bold">{order ? `Sur Commande #${order.id}` : 'En attente'}</p>
+                           </div>
+                        </div>
+                        {order && (
+                           <div className="mt-3 p-2 bg-slate-50 rounded-lg text-[10px] font-bold text-slate-600 flex justify-between items-center group-hover:bg-indigo-50 transition-colors">
+                              <span>Client : {order.client_name}</span>
+                              <span className="text-indigo-600">Voir trajet</span>
+                           </div>
+                        )}
+                        <div className="mt-2 flex items-center gap-2">
+                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: '65%' }}></div>
+                           </div>
+                           <span className="text-[10px] font-black text-slate-400">65%</span>
+                        </div>
+                      </div>
+                    );
+                  }) : (
+                    <div className="text-center py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                      <p className="text-xs font-bold text-slate-400">Aucun livreur en mouvement</p>
                     </div>
-                  </div>
-                  <p className="text-2xl font-bold text-slate-800">{stats.active?.active_orders || 0}</p>
-                  <p className="text-xs text-slate-400 mt-1">En cours de traitement</p>
-                </div>
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-slate-500">Plats au menu</span>
-                    <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                      <Utensils className="w-5 h-5 text-purple-600" />
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold text-slate-800">{menuItems.length}</p>
-                  <p className="text-xs text-slate-400 mt-1">{menuItems.filter(m => m.is_available).length} disponibles</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -637,112 +632,219 @@ function App() {
           {/* === ONGLET MENU === */}
           {activeTab === 'menu' && (
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-800">Menu & Plats</h2>
-                  <p className="text-sm text-slate-500">Gérez votre carte et la disponibilité de vos plats en temps réel.</p>
+                  <h2 className="text-xl md:text-2xl font-bold text-slate-800">Votre Carte</h2>
                 </div>
                 <button
                   onClick={() => { setEditingItem(null); setMenuForm({ name: '', description: '', price: '', category: '', image_url: '' }); setShowMenuForm(true); }}
-                  className="flex items-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-all shadow-md"
+                  className="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-all shadow-md"
                 >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Nouveau Plat
+                  <Plus className="w-5 h-5 mr-2" /> Nouveau Plat
                 </button>
               </div>
 
-              {/* Modal formulaire menu */}
-              {showMenuForm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-bold">{editingItem ? 'Modifier le plat' : 'Nouveau plat'}</h3>
-                      <button onClick={() => setShowMenuForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-                    </div>
-                    <form onSubmit={handleSaveMenuItem} className="space-y-4">
-                      <input type="text" placeholder="Nom du plat" value={menuForm.name} onChange={e => setMenuForm({...menuForm, name: e.target.value})} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" required />
-                      <textarea placeholder="Description" value={menuForm.description} onChange={e => setMenuForm({...menuForm, description: e.target.value})} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" rows={2} />
-                      <input type="number" placeholder="Prix (FCFA)" value={menuForm.price} onChange={e => setMenuForm({...menuForm, price: e.target.value})} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" required />
-                      <input type="text" placeholder="Catégorie" value={menuForm.category} onChange={e => setMenuForm({...menuForm, category: e.target.value})} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" required />
-                      <input type="url" placeholder="URL image (optionnel)" value={menuForm.image_url} onChange={e => setMenuForm({...menuForm, image_url: e.target.value})} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
-                      <button type="submit" className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg flex items-center justify-center">
-                        <Save className="w-4 h-4 mr-2" /> {editingItem ? 'Modifier' : 'Ajouter'}
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              )}
-
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                {menuItems.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400">
-                    <Utensils className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p>Aucun plat dans votre menu. Ajoutez-en un !</p>
-                  </div>
-                ) : (
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left border-collapse min-w-[600px]">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
-                        <th className="px-6 py-4 font-semibold">Produit</th>
-                        <th className="px-6 py-4 font-semibold">Catégorie</th>
-                        <th className="px-6 py-4 font-semibold">Prix</th>
-                        <th className="px-6 py-4 font-semibold">Disponibilité</th>
-                        <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs">
+                        <th className="px-4 py-4 font-semibold">Produit</th>
+                        <th className="px-4 py-4 font-semibold">Prix</th>
+                        <th className="px-4 py-4 font-semibold">Statut</th>
+                        <th className="px-4 py-4 font-semibold text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {menuItems.map(item => (
-                        <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4 flex items-center">
-                            {item.image_url ? (
-                              <img src={item.image_url} alt={item.name} className="w-12 h-12 rounded-lg object-cover mr-4 shadow-sm" />
-                            ) : (
-                              <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center mr-4">
-                                <Utensils className="w-5 h-5 text-slate-400" />
-                              </div>
-                            )}
-                            <div>
-                              <span className="font-bold text-slate-800">{item.name}</span>
-                              {item.description && <p className="text-xs text-slate-400 mt-0.5">{item.description}</p>}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm font-medium text-slate-500">{item.category}</td>
-                          <td className="px-6 py-4 text-sm font-bold text-slate-700">{formatPrice(item.price)}</td>
-                          <td className="px-6 py-4">
+                        <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-4 py-4 truncate max-w-[200px] font-bold text-slate-800 text-sm">{item.name}</td>
+                          <td className="px-4 py-4 text-sm font-bold text-slate-700">{formatPrice(item.price)}</td>
+                          <td className="px-4 py-4">
                             <button
                                onClick={() => handleToggleAvailability(item)}
-                               className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${item.is_available ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                               className={`px-3 py-1 rounded-full text-[10px] font-black ${item.is_available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
                             >
-                              {item.is_available ? 'En Stock' : 'Épuisé'}
+                              {item.is_available ? 'STOCK' : 'ÉPUISÉ'}
                             </button>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <button onClick={() => openEditForm(item)} className="text-slate-400 hover:text-indigo-600 p-2 transition-colors"><Edit className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteMenuItem(item.id)} className="text-slate-400 hover:text-red-600 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          <td className="px-4 py-4 text-right">
+                            <button onClick={() => openEditForm(item)} className="text-slate-400 p-2"><Edit className="w-4 h-4" /></button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* === ONGLET DASHBOARD === */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-2xl font-black text-slate-800">Tableau de Bord</h2>
+                <div className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border">
+                  <span className="w-2 h-2 bg-success rounded-full animate-pulse"></span>
+                  <span className="text-xs font-bold text-slate-600">Live: Données en temps réel</span>
+                </div>
+              </div>
+
+              {/* STATS CARDS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-2 bg-indigo-50 rounded-xl"><DollarSign className="w-6 h-6 text-indigo-600" /></div>
+                    <span className="text-[10px] font-black text-success bg-success/10 px-2 py-0.5 rounded-full">+12%</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">Recettes Aujourd'hui</p>
+                  <h3 className="text-2xl font-black text-slate-900 mt-1">{formatPrice(stats?.today?.today_revenue || 0)}</h3>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-2 bg-orange-50 rounded-xl"><ShoppingBag className="w-6 h-6 text-orange-600" /></div>
+                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Aujourd'hui</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">Commandes Livrées</p>
+                  <h3 className="text-2xl font-black text-slate-900 mt-1">{stats?.today?.today_orders || 0}</h3>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-2 bg-emerald-50 rounded-xl"><TrendingUp className="w-6 h-6 text-emerald-600" /></div>
+                    <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Global</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">Revenu Total (Livrées)</p>
+                  <h3 className="text-2xl font-black text-slate-900 mt-1">{formatPrice(stats?.total?.total_revenue || 0)}</h3>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-2 bg-red-50 rounded-xl"><BellRing className="w-6 h-6 text-red-600" /></div>
+                    <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full animate-pulse">{orders.length}</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">Commandes en Cours</p>
+                  <h3 className="text-2xl font-black text-slate-900 mt-1">{orders.length}</h3>
+                </div>
+              </div>
+
+              {/* RECENT PERFORMANCE */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                   <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-black text-slate-800 flex items-center"><Star className="w-5 h-5 text-yellow-400 mr-2" /> Top Plats</h3>
+                      <button className="text-indigo-600 text-xs font-bold hover:underline" onClick={() => setActiveTab('menu')}>Gérer le menu</button>
+                   </div>
+                   <div className="space-y-4">
+                      {menuItems.slice(0, 5).map(item => (
+                        <div key={item.id} className="flex items-center justify-between group">
+                          <div className="flex items-center">
+                            <img src={item.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100'} className="w-10 h-10 rounded-xl object-cover mr-3 grayscale group-hover:grayscale-0 transition-all shadow-sm" alt={item.name} />
+                            <div>
+                               <p className="text-sm font-bold text-slate-800">{item.name}</p>
+                               <p className="text-[10px] text-slate-500">{item.category}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-black text-slate-700">{formatPrice(item.price)}</span>
+                        </div>
+                      ))}
+                      {menuItems.length === 0 && <p className="text-sm text-slate-400 italic">Aucun plat configuré</p>}
+                   </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                   <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-black text-slate-800 flex items-center">📣 Notifications Récentes</h3>
+                      <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500">Live Feed</span>
+                   </div>
+                   <div className="space-y-1">
+                      {orders.slice(0, 4).map(o => (
+                        <div key={o.id} className="flex gap-4 p-3 hover:bg-slate-50 rounded-2xl transition-all border-b border-slate-50 last:border-0 items-center">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${o.status === 'nouvelle' ? 'bg-red-500 animate-ping' : o.status === 'preparation' ? 'bg-orange-500' : 'bg-green-500'}`}></div>
+                          <div className="flex-1">
+                            <p className="text-xs font-bold text-slate-800">Commande #{o.id} - {o.client_name}</p>
+                            <p className="text-[10px] text-slate-500">{formatTime(o.created_at)} • {o.status.toUpperCase()}</p>
+                          </div>
+                          <button onClick={() => setActiveTab('commandes')} className="text-indigo-600"><Eye className="w-4 h-4" /></button>
+                        </div>
+                      ))}
+                      {orders.length === 0 && <p className="text-sm text-slate-400 italic py-4 text-center">Aucune activité récente</p>}
+                   </div>
+                </div>
               </div>
             </div>
           )}
 
           {/* === ONGLET HORAIRES === */}
-          {activeTab === 'horaires' && <HoraireManager />}
-
-          {/* Placeholder pour les autres onglets */}
-          {activeTab !== 'commandes' && activeTab !== 'menu' && activeTab !== 'dashboard' && activeTab !== 'horaires' && (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-               <Package className="w-16 h-16 mb-4 opacity-20" />
-               <p className="text-lg font-medium text-slate-500">Le module "{activeTab}" est en cours de développement.</p>
-               <p className="text-sm mt-2 text-indigo-500 hover:underline cursor-pointer" onClick={() => setActiveTab('commandes')}>Retour aux commandes Live</p>
+          {activeTab === 'horaires' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+               <HoraireManager />
+               <div className="mt-12 bg-indigo-900 rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl">
+                 <div className="relative z-10">
+                   <h3 className="text-xl font-bold mb-2">💡 Conseil SenFood</h3>
+                   <p className="text-indigo-200 text-sm max-w-lg leading-relaxed">
+                     Gardez vos horaires à jour pour éviter les commandes hors service. Un restaurant ponctuel est favorisé par notre algorithme de recommandation.
+                   </p>
+                 </div>
+                 <Utensils className="absolute -right-10 -bottom-10 w-40 h-40 text-white/10 rotate-12" />
+               </div>
             </div>
           )}
 
         </div>
       </main>
+
+      {/* MODAL MENU */}
+      {showMenuForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                 <h3 className="text-xl font-bold text-slate-800">{editingItem ? 'Modifier le plat' : 'Ajouter un nouveau plat'}</h3>
+                 <button onClick={() => setShowMenuForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
+              </div>
+              <form onSubmit={handleMenuSubmit} className="p-6 space-y-4">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nom du plat</label>
+                       <input type="text" value={menuForm.name} onChange={e => setMenuForm({...menuForm, name: e.target.value})} required className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Ex: Tiep Bou Dien Rouge"/>
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Description</label>
+                       <textarea value={menuForm.description} onChange={e => setMenuForm({...menuForm, description: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none h-24" placeholder="Description du plat..."/>
+                    </div>
+                    <div>
+                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Prix (FCFA)</label>
+                       <input type="number" value={menuForm.price} onChange={e => setMenuForm({...menuForm, price: e.target.value})} required className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                    </div>
+                    <div>
+                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Catégorie</label>
+                       <select value={menuForm.category} onChange={e => setMenuForm({...menuForm, category: e.target.value})} required className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none">
+                          <option value="">Choisir...</option>
+                          <option value="Sénégalais">Sénégalais</option>
+                          <option value="Fast Food">Fast Food</option>
+                          <option value="Pizza">Pizza</option>
+                          <option value="Jus Locaux">Jus Locaux</option>
+                          <option value="Grillades">Grillades</option>
+                       </select>
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Image URL</label>
+                       <input type="text" value={menuForm.image_url} onChange={e => setMenuForm({...menuForm, image_url: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..."/>
+                    </div>
+                 </div>
+                 <div className="pt-4 flex gap-3">
+                    <button type="button" onClick={() => setShowMenuForm(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black py-4 rounded-2xl text-sm transition-all focus:ring-4 focus:ring-slate-100">Annuler</button>
+                    <button type="submit" className="flex-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl text-sm px-8 shadow-xl shadow-indigo-200 transition-all active:scale-95 focus:ring-4 focus:ring-indigo-500 flex items-center justify-center gap-2">
+                       {editingItem ? <Save className="w-4 h-4"/> : <Plus className="w-4 h-4"/>}
+                       {editingItem ? 'Sauvegarder' : 'Ajouter'}
+                    </button>
+                 </div>
+              </form>
+           </div>
+        </div>
+      )}
     </div>
   );
 }

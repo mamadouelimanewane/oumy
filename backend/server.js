@@ -177,21 +177,36 @@ io.on('connection', (socket) => {
         [socket.user.id, latitude, longitude]
       );
 
-      // Notifier le client si commande en cours
+      // Broadcast global pour le dashboard admin (optionnel pour fleet monitoring)
+      io.to('admin').emit('fleet_location_update', {
+        courierId: socket.user.id,
+        latitude,
+        longitude,
+        timestamp: new Date().toISOString()
+      });
+
+      // Notifier le client et le restaurant si commande en cours
       if (orderId) {
         const orderResult = await pool.query(
-          'SELECT client_id FROM orders WHERE id = $1 AND courier_id = $2',
+          'SELECT client_id, restaurant_id FROM orders WHERE id = $1 AND courier_id = $2',
           [orderId, socket.user.id]
         );
 
         if (orderResult.rows.length > 0) {
-          const clientId = orderResult.rows[0].client_id;
-          io.to(`user_${clientId}`).emit('courier_location_update', {
+          const { client_id, restaurant_id } = orderResult.rows[0];
+          
+          const payload = {
             orderId,
             latitude,
             longitude,
             courierId: socket.user.id,
-          });
+            timestamp: new Date().toISOString()
+          };
+
+          // Envoyer au client
+          io.to(`user_${client_id}`).emit('courier_location_update', payload);
+          // Envoyer au restaurant
+          io.to(`user_${restaurant_id}`).emit('courier_location_update', payload);
         }
       }
     } catch (err) {

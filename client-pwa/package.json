@@ -12,6 +12,8 @@
     "build:android": "npm run build && cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@googlemaps/react-wrapper": "^1.2.0",
+    "axios": "^1.13.6",
     "fuse.js": "^7.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

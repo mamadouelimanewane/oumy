@@ -17,22 +17,30 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "com.mamadouelimane.applivreur"
+      "package": "com.mamadouelimane.applivreur",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "VOTRE_GOOGLE_MAPS_API_KEY"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "eas": {
-        "projectId": "78862722-d3f2-4d56-85fa-fd481b5521f0"
-      }
+      "eas": { "projectId": "78862722-d3f2-4d56-85fa-fd481b5521f0" },
+      "LOCATIONIQ_API_KEY": "pk.360c75a96d13bd69828d8494f1beec0f"
     },
     "plugins": [
-      "expo-font"
+      ["expo-location", { "locationAlwaysPermission": "Autoriser le suivi en arrière-plan." }]
     ]
   }
 }

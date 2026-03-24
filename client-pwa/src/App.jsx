@@ -2,13 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Fuse from 'fuse.js';
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   const [activePage, setActivePageRaw] = useState('explorer');
   const setActivePage = (page) => { setActivePageRaw(page); window.scrollTo({ top: 0, behavior: 'instant' }); };
   const [activeCategory, setActiveCategory] = useState("Tous");
   const [plats, setPlats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [orderStatus, setOrderStatus] = useState(null); // loading | success | error
+  const [orderStatus, setOrderStatus] = useState(null); // loading | success | error | added
   const [panier, setPanier] = useState(() => {
     try { const saved = localStorage.getItem('senfood_panier'); return saved ? JSON.parse(saved) : []; }
     catch { return []; }
@@ -17,9 +20,67 @@ function App() {
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoApplied, setPromoApplied] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('wave');
+  const [socket, setSocket] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [trackingOrder, setTrackingOrder] = useState(null);
+  const [courierLoc, setCourierLoc] = useState(null);
+
+  // AUTH CHECK
+  useEffect(() => {
+    const savedToken = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
+
+  // SOCKET.IO
+  useEffect(() => {
+    if (!token) return;
+    import('./api').then(({ createSocketConnection }) => {
+       createSocketConnection(token).then(s => {
+          setSocket(s);
+          s.on('order_status_changed', (data) => {
+             setOrderStatus('status_update');
+             setTimeout(() => setOrderStatus(null), 3000);
+             fetchOrders(); // Rafraîchir
+          });
+          s.on('courier_location_update', (data) => {
+            if (trackingOrder && data.orderId === trackingOrder.id) {
+              setCourierLoc({ lat: data.latitude, lng: data.longitude });
+            }
+          });
+       });
+    });
+    return () => { if (socket) socket.disconnect(); };
+  }, [token, trackingOrder]);
+
+  const fetchOrders = async () => {
+    try {
+      const { clientAPI } = await import('./api');
+      const data = await clientAPI.getOrders();
+      setOrders(data.items || []);
+    } catch (err) {
+      console.error('Fetch orders error:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user && activePage === 'commandes') {
+      fetchOrders();
+    }
+  }, [user, activePage]);
 
   const addToPanier = (plat) => {
     setPanier(prev => {
+      // Vérifier si le panier contient déjà des produits d'un autre restaurant
+      if (prev.length > 0 && prev[0].restaurant_id !== plat.restaurant_id) {
+         if (confirm("Votre panier contient des produits d'un autre restaurant. Voulez-vous vider le panier pour ce nouveau restaurant ?")) {
+            return [{...plat, qty: 1}];
+         }
+         return prev;
+      }
       const exists = prev.find(p => p.id === plat.id);
       if (exists) return prev.map(p => p.id === plat.id ? {...p, qty: p.qty + 1} : p);
       return [...prev, {...plat, qty: 1}];
@@ -30,37 +91,53 @@ function App() {
 
   const removeFromPanier = (id) => setPanier(prev => prev.filter(p => p.id !== id));
 
-  const handlePayment = () => {
+  const handleCheckout = async () => {
+    if (!user) {
+       setActivePage('profil');
+       return;
+    }
     setOrderStatus('loading');
-    // Simuler le paiement (Wave ou Orange Money)
-    setTimeout(() => {
+    try {
+      const { clientAPI } = await import('./api');
+      const orderData = {
+        restaurant_id: panier[0].restaurant_id,
+        items: panier.map(p => ({ menu_item_id: p.id, quantity: p.qty })),
+        delivery_address: "Plateau, Dakar", // Placeholder, ideally from user profile
+        latitude: 14.6937,
+        longitude: -17.4441,
+        payment_method: paymentMethod,
+        promo_code: promoApplied ? promoCode : null
+      };
+
+      await clientAPI.createOrder(orderData);
+      
       setPanier([]);
       setPromoCode('');
       setPromoDiscount(0);
       setPromoApplied(false);
       setOrderStatus('success');
-      setActivePage('commandes');
+      setTimeout(() => {
+        setOrderStatus(null);
+        setActivePage('commandes');
+      }, 2000);
+    } catch (err) {
+      alert(err.message || "Erreur lors de la commande");
+      setOrderStatus('error');
       setTimeout(() => setOrderStatus(null), 3000);
-    }, 2000);
+    }
   };
 
-  // Persist cart to localStorage
-  useEffect(() => {
-    localStorage.setItem('senfood_panier', JSON.stringify(panier));
-  }, [panier]);
-
-  const applyPromoCode = () => {
-    const code = promoCode.trim().toUpperCase();
-    if (code === 'BIENVENUE') {
-      setPromoDiscount(Math.round(totalPanier * 0.1));
+  const applyPromoCode = async () => {
+    if (!promoCode.trim()) return;
+    try {
+      const { promotionsAPI } = await import('./api');
+      const data = await promotionsAPI.validate(promoCode, totalPanier, panier[0]?.restaurant_id);
+      setPromoDiscount(data.discount_amount);
       setPromoApplied(true);
-    } else if (code === 'SENFOOD') {
-      setPromoDiscount(500);
-      setPromoApplied(true);
-    } else {
+    } catch (err) {
+      alert(err.message || 'Code promo invalide');
       setPromoDiscount(0);
       setPromoApplied(false);
-      alert('Code promo invalide');
     }
   };
 
@@ -185,28 +262,29 @@ function App() {
       
       {/* TOAST / ALERTE COMMANDE */}
       {orderStatus && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-11/12 max-w-sm flex items-center justify-center transition-all">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-11/12 max-w-sm flex items-center justify-center transition-all animate-in fade-in zoom-in duration-300">
           {orderStatus === 'added' && (
-            <div className="bg-secondary text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 animate-bounce">
-               <span className="text-2xl">🛒</span>
+            <div className="bg-secondary text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10">
+               <span className="text-2xl animate-bounce">🛒</span>
                <span className="font-bold">Ajouté au panier !</span>
             </div>
           )}
           {orderStatus === 'loading' && (
             <div className="bg-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-100">
                <div className="w-5 h-5 rounded-full border-4 border-t-primary border-l-primary border-b-gray-200 border-r-gray-200 animate-spin"></div>
-               {paymentMethod === 'wave' ? (
-                 <img src="/wave-logo.png" className="h-5 object-contain" alt="Wave"/>
-               ) : (
-                 <span className="text-lg">🟠</span>
-               )}
-               <span className="font-bold text-gray-800">Paiement {paymentMethod === 'wave' ? 'Wave' : 'Orange Money'} en cours...</span>
+               <span className="font-bold text-gray-800">Communication avec {paymentMethod.toUpperCase()}...</span>
             </div>
           )}
           {orderStatus === 'success' && (
             <div className="bg-green-500 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
-               <span className="text-white text-2xl">✅</span>
-               <span className="font-bold text-white">Commande confirmée !</span>
+               <span className="text-white text-2xl">🎉</span>
+               <span className="font-bold text-white">Commande réussie !</span>
+            </div>
+          )}
+          {orderStatus === 'status_update' && (
+            <div className="bg-indigo-600 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/20">
+               <span className="text-white text-2xl">🔔</span>
+               <span className="font-bold text-white text-sm">Votre commande a été mise à jour !</span>
             </div>
           )}
         </div>
@@ -240,10 +318,16 @@ function App() {
                </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
-                <span className="text-sm font-bold">Oumy Dia</span>
-                <img src="https://ui-avatars.com/api/?name=Oumy+Dia&background=f97316&color=fff" className="w-8 h-8 rounded-full" alt="User"/>
-              </div>
+              {user ? (
+                <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
+                  <span className="text-sm font-bold">{user.name}</span>
+                  <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=f97316&color=fff`} className="w-8 h-8 rounded-full" alt="User"/>
+                </div>
+              ) : (
+                <button onClick={() => setActivePage('profil')} className="bg-primary hover:bg-orange-600 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20">
+                  Se connecter
+                </button>
+              )}
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all cursor-pointer">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
               </div>
@@ -516,18 +600,18 @@ function App() {
                 </div>
 
                 <button
-                  onClick={handlePayment}
+                  onClick={handleCheckout}
                   disabled={orderStatus === 'loading'}
                   className="w-full bg-primary hover:bg-orange-600 disabled:opacity-70 text-white font-black py-5 rounded-2xl text-lg transition-all shadow-xl shadow-primary/30 flex items-center justify-center gap-3"
                 >
                   {orderStatus === 'loading' ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   ) : paymentMethod === 'wave' ? (
-                    <img src="/wave-logo.png" className="h-8 object-contain rounded" alt="Wave"/>
+                    <img src="https://static.wave.com/images/favicon.png" className="h-6 object-contain rounded" alt="Wave"/>
                   ) : (
-                    <span className="text-2xl">🟠</span>
+                    <span className="text-xl">🟠</span>
                   )}
-                  {orderStatus === 'loading' ? 'Paiement en cours...' : `Payer avec ${paymentMethod === 'wave' ? 'Wave' : 'Orange Money'}`}
+                  {orderStatus === 'loading' ? 'Finalisation...' : `Confirmer Commande (${(totalPanier - promoDiscount).toLocaleString()} F)`}
                 </button>
               </div>
             </>
@@ -546,116 +630,196 @@ function App() {
           </button>
           <h2 className="text-3xl font-black text-gray-900 mb-8">Mes Commandes 📦</h2>
           <div className="space-y-4">
-            {[
-              { id:'#1045', name:'Tiep Bou Dien Rouge', status:'En livraison 🏍️', time:'Dans 15 min', amount:'3 000 FCFA', color:'blue', items:[{ id:2, name:'Tiep Bou Dien Rouge', price:3000, image_url:'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&q=80', restaurant_name:'Chef Ousmane (Dark Kitchen)' }] },
-              { id:'#1044', name:'Double Cheese Burger', status:'En préparation 👨‍🍳', time:'Il y a 30 min', amount:'5 500 FCFA', color:'orange', items:[{ id:19, name:'Double Cheese Burger', price:5500, image_url:'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80', restaurant_name:'Sen Burger Dakar' }] },
-              { id:'#1043', name:'Yassa Poulet', status:'Livré ✅', time:'Hier', amount:'3 500 FCFA', color:'green', items:[{ id:6, name:'Yassa Poulet', price:3500, image_url:'https://images.unsplash.com/photo-1598103442097-8b74394b95c8?w=500&q=80', restaurant_name:'Chef Ousmane (Dark Kitchen)' }] },
-            ].map(order => (
+            {orders.length > 0 ? orders.map(order => (
               <div key={order.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <span className="text-xs font-black text-gray-400 uppercase tracking-widest">{order.id}</span>
-                    <h4 className="font-bold text-gray-900 text-lg mt-0.5">{order.name}</h4>
+                    <span className="text-xs font-black text-gray-400 uppercase tracking-widest">#{order.id}</span>
+                    <h4 className="font-bold text-gray-900 text-lg mt-0.5">{order.restaurant_name}</h4>
                   </div>
-                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${order.color === 'blue' ? 'bg-blue-50 text-blue-600' : order.color === 'orange' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>{order.status}</span>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${
+                    order.status === 'en_route' ? 'bg-blue-50 text-blue-600 animate-pulse' : 
+                    order.status === 'livree' ? 'bg-green-50 text-green-600' : 
+                    order.status === 'annulee' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
+                  }`}>
+                    {order.status === 'nouvelle' ? 'Attente ⏳' : 
+                     order.status === 'preparation' ? 'Cuisine 👨‍🍳' : 
+                     order.status === 'prete' ? 'Prête ✅' : 
+                     order.status === 'en_route' ? 'En Livraison 🏍️' : 
+                     order.status === 'livree' ? 'Livré ✨' : order.status}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                  <span className="text-gray-400 text-sm">{order.time}</span>
-                  <span className="font-black text-primary">{order.amount}</span>
+                <div className="flex justify-between items-center pt-3 border-t border-gray-100 mb-4">
+                  <span className="text-gray-400 text-sm">{new Date(order.created_at).toLocaleDateString()}</span>
+                  <span className="font-black text-primary">{order.total_amount.toLocaleString()} F</span>
                 </div>
-                {order.status === 'Livré ✅' && (
-                  <button
-                    onClick={() => {
-                      order.items.forEach(item => addToPanier({ ...item, qty: 1 }));
-                      setActivePage('panier');
-                    }}
-                    className="mt-4 w-full bg-secondary hover:bg-gray-800 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                    Re-commander
-                  </button>
-                )}
+                
+                <div className="flex gap-2">
+                  {order.status === 'en_route' && (
+                    <button
+                      onClick={() => {
+                        setTrackingOrder(order);
+                        setCourierLoc({ lat: order.courier_lat, lng: order.courier_lng });
+                      }}
+                      className="flex-1 bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
+                      Suivre le livreur
+                    </button>
+                  )}
+                  {order.status === 'livree' && (
+                    <button
+                      className="flex-1 bg-secondary hover:bg-gray-800 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      Re-commander
+                    </button>
+                  )}
+                </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+                <span className="text-5xl block mb-4">🛒</span>
+                <p className="text-gray-400 font-bold">Aucune commande pour le moment</p>
+              </div>
+            )}
           </div>
           </div>
+
+          {/* MODAL TRACKING */}
+          {trackingOrder && (
+            <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+               <div className="bg-white w-full max-w-2xl h-[80vh] sm:h-auto sm:max-h-[85vh] rounded-t-[40px] sm:rounded-[40px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-500 flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-white sticky top-0 z-10">
+                    <div>
+                       <h3 className="text-xl font-black text-gray-900">Suivi Commande #{trackingOrder.id}</h3>
+                       <p className="text-xs text-green-500 font-bold">En route vers vous 🏁</p>
+                    </div>
+                    <button onClick={() => setTrackingOrder(null)} className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors">
+                      <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 bg-gray-100 relative min-h-[300px]">
+                     {/* Google Map Implementation here */}
+                     <iframe 
+                       width="100%" 
+                       height="100%" 
+                       style={{ border: 0 }} 
+                       loading="lazy" 
+                       allowFullScreen 
+                       src={`https://www.google.com/maps/embed/v1/place?key=VOTRE_GOOGLE_MAPS_API_KEY&q=${courierLoc?.lat},${courierLoc?.lng}&zoom=15`}
+                     ></iframe>
+                     
+                     <div className="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur-md rounded-3xl p-5 shadow-xl border border-white/50 flex items-center gap-4">
+                        <div className="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center">
+                           <span className="text-2xl">🏍️</span>
+                        </div>
+                        <div className="flex-1">
+                           <p className="text-[10px] font-black text-primary uppercase tracking-widest">Livreur en approche</p>
+                           <h4 className="font-black text-gray-900">Moussa Diop</h4>
+                           <p className="text-xs text-gray-500 font-medium">Estimé : 5-8 minutes</p>
+                        </div>
+                        <a href="tel:770000000" className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/30">
+                           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                        </a>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
         </main>
       )}
 
-      {/* PAGE PROFIL */}
+      {/* PAGE PROFIL / AUTH */}
       {activePage === 'profil' && (
         <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-md mx-auto">
           <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
             Retour
           </button>
-          <div className="text-center mb-10">
-            <img src="https://ui-avatars.com/api/?name=Oumy+Dia&background=f97316&color=fff&size=128" className="w-28 h-28 rounded-full mx-auto border-4 border-primary shadow-xl shadow-primary/20" alt="Profil" />
-            <h2 className="text-2xl font-black text-gray-900 mt-4">Oumy Dia</h2>
-            <p className="text-gray-400 font-medium">oumy.dia@gmail.com</p>
-            <div className="flex justify-center gap-6 mt-4 text-center">
-              <div><p className="text-2xl font-black text-primary">12</p><p className="text-xs text-gray-400">Commandes</p></div>
-              <div><p className="text-2xl font-black text-green-500">4.9</p><p className="text-xs text-gray-400">Note</p></div>
-              <div><p className="text-2xl font-black text-secondary">2</p><p className="text-xs text-gray-400">Favoris</p></div>
-            </div>
-          </div>
-          {/* Carte de fidélité */}
-          <div className="bg-gradient-to-r from-secondary via-slate-800 to-gray-900 rounded-3xl p-6 mb-6 text-white shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <span className="text-3xl">🏆</span>
-                <div>
-                  <h3 className="font-black text-lg">Carte Fidélité</h3>
-                  <p className="text-gray-400 text-sm font-medium">Niveau Bronze</p>
+
+          {!user ? (
+            <AuthScreen 
+              mode={authMode} 
+              setMode={setAuthMode} 
+              onSuccess={(u, t) => { 
+                setUser(u); setToken(t); 
+                localStorage.setItem('user', JSON.stringify(u));
+                localStorage.setItem('token', t);
+                setActivePage('explorer');
+              }} 
+            />
+          ) : (
+            <>
+            <div className="text-center mb-10">
+              <div className="relative inline-block group">
+                 <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=f97316&color=fff&size=200`} className="w-28 h-28 rounded-[40px] mx-auto border-4 border-white shadow-2xl transition-transform group-hover:scale-105" alt="Profil" />
+                 <div className="absolute -bottom-2 -right-2 bg-green-500 w-8 h-8 rounded-full border-4 border-white"></div>
+              </div>
+              <h2 className="text-3xl font-black text-gray-900 mt-6">{user.name}</h2>
+              <p className="text-gray-400 font-medium">{user.phone}</p>
+              
+              <div className="flex justify-center gap-8 mt-8">
+                <div className="bg-white py-4 px-6 rounded-3xl shadow-sm border border-gray-100 flex-1">
+                  <p className="text-2xl font-black text-primary">12</p>
+                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Commandes</p>
+                </div>
+                <div className="bg-white py-4 px-6 rounded-3xl shadow-sm border border-gray-100 flex-1">
+                  <p className="text-2xl font-black text-green-500">4.9</p>
+                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Note</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-black text-primary">1 250</p>
-                <p className="text-xs text-gray-400 font-medium">points</p>
-              </div>
             </div>
-            <div className="mb-2">
-              <div className="flex justify-between text-xs font-bold text-gray-400 mb-1">
-                <span>Bronze</span>
-                <span>Silver (2 500 pts)</span>
+
+            <div className="space-y-4">
+              <div className="bg-gradient-to-br from-secondary to-slate-800 rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden">
+                <div className="relative z-10">
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 mb-1">Programme Fidélité</p>
+                   <h3 className="text-xl font-black">Niveau Or ✨</h3>
+                   <div className="flex items-center gap-2 mt-4 mb-2">
+                      <span className="text-2xl font-black text-primary">2 450</span>
+                      <span className="text-xs text-white/60 font-medium">points disponibles</span>
+                   </div>
+                   <div className="w-full bg-white/10 h-2 rounded-full mt-4">
+                      <div className="bg-primary h-full w-[80%] rounded-full shadow-[0_0_10px_rgba(249,115,22,0.5)]"></div>
+                   </div>
+                </div>
+                <svg className="absolute -right-10 -bottom-10 w-40 h-40 text-white/5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
               </div>
-              <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
-                <div className="bg-primary h-full rounded-full transition-all" style={{ width: '50%' }}></div>
+
+              <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+                {[
+                  { icon:'📍', label:'Adresses', value:'Gérer mes adresses' },
+                  { icon:'💳', label:'Paiements', value:'Wave par défaut' },
+                  { icon:'🎁', label:'Parrainage', value:'Gagnez 5 000 FCFA' },
+                  { icon:'⚙️', label:'Paramètres', value:'Notifications, Sécurité' },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center px-6 py-5 hover:bg-neutral-50 cursor-pointer transition-colors">
+                    <span className="text-2xl mr-4">{item.icon}</span>
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-400 font-bold uppercase tracking-tighter mb-0.5">{item.label}</p>
+                      <p className="font-bold text-gray-800 text-sm whitespace-nowrap">{item.value}</p>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
+                  </div>
+                ))}
               </div>
-              <p className="text-xs text-gray-400 mt-1">Encore 1 250 pts pour atteindre Silver</p>
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-400 font-medium">Code de parrainage</p>
-                <p className="font-black text-primary text-lg tracking-wider">OUMY2026</p>
-              </div>
-              <button
-                onClick={() => { navigator.clipboard.writeText('OUMY2026'); }}
-                className="bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-4 py-2 rounded-xl transition-colors"
+
+              <button 
+                onClick={() => { 
+                  localStorage.removeItem('token'); 
+                  localStorage.removeItem('user'); 
+                  setUser(null); setToken(null); 
+                  setActivePage('explorer');
+                }}
+                className="w-full py-5 text-red-500 font-black text-sm uppercase tracking-widest hover:bg-red-50 rounded-3xl transition-colors"
               >
-                Copier
+                Déconnexion
               </button>
             </div>
-          </div>
-
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-            {[
-              { icon:'📍', label:'Adresse de livraison', value:'Plateau, Dakar' },
-              { icon:'📱', label:'Téléphone', value:'+221 77 123 45 67' },
-              { icon:'💳', label:'Moyen de paiement', value:'Wave (Par défaut)' },
-              { icon:'🛎️', label:'Notifications', value:'Activées' },
-            ].map((item, i) => (
-              <div key={i} className="flex items-center px-6 py-5 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors">
-                <span className="text-2xl mr-4">{item.icon}</span>
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400 font-medium">{item.label}</p>
-                  <p className="font-bold text-gray-800">{item.value}</p>
-                </div>
-                <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-              </div>
-            ))}
-          </div>
+            </>
+          )}
           </div>
         </main>
       )}
@@ -689,9 +853,84 @@ function App() {
   );
 }
 
+// COMPOSANT AUTH
+function AuthScreen({ mode, setMode, onSuccess }) {
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const { authAPI } = await import('./api');
+      let data;
+      if (mode === 'login') {
+        data = await authAPI.login(phone, password);
+      } else {
+        data = await authAPI.register({ phone, password, name, role: 'client' });
+      }
+      
+      if (data.token) {
+        onSuccess(data.user, data.token);
+      } else {
+        setError(data.error || 'Une erreur est survenue');
+      }
+    } catch (err) {
+      setError(err.message || 'Erreur de connexion');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[40px] p-8 shadow-2xl border border-gray-100 animate-in fade-in slide-in-from-bottom-10 duration-500">
+      <div className="text-center mb-8">
+         <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">👤</span>
+         </div>
+         <h3 className="text-2xl font-black text-gray-900">{mode === 'login' ? 'Bienvenue !' : 'Créer un compte'}</h3>
+         <p className="text-gray-400 text-sm font-medium mt-1">{mode === 'login' ? 'Connectez-vous pour commander' : 'Rejoignez la révolution food'}</p>
+      </div>
+
+      {error && <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold">{error}</div>}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {mode === 'register' && (
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 ml-1">Nom complet</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Oumy Dia" className="w-full bg-neutral-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none" required />
+          </div>
+        )}
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 ml-1">Téléphone</label>
+          <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="77 000 00 00" className="w-full bg-neutral-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none" required />
+        </div>
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 ml-1">Mot de passe</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="w-full bg-neutral-50 border-none rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none" required />
+        </div>
+        
+        <button type="submit" disabled={loading} className="w-full bg-primary hover:bg-orange-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-50 mt-4 flex justify-center items-center">
+          {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : (mode === 'login' ? 'Se connecter' : "S'inscrire")}
+        </button>
+      </form>
+
+      <div className="mt-8 text-center">
+        <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} className="text-xs font-bold text-gray-400 hover:text-primary transition-colors">
+          {mode === 'login' ? "Pas encore de compte ? S'inscrire" : "Déjà un compte ? Se connecter"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Composants Icones
 const Store = ({ className }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5"></path></svg>
 );
 const ChevronRight = ({ className }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>

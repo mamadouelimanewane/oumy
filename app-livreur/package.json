@@ -10,13 +10,19 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
+    "@react-native-community/geolocation": "^3.4.0",
+    "axios": "^1.13.6",
     "expo": "~55.0.6",
     "expo-font": "~55.0.4",
+    "expo-location": "^55.1.4",
     "expo-status-bar": "~55.0.4",
+    "polyline": "^0.2.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.2",
-    "react-native-web": "^0.21.2"
+    "react-native-maps": "^1.27.2",
+    "react-native-web": "^0.21.2",
+    "socket.io-client": "^4.8.3"
   },
   "private": true
 }
