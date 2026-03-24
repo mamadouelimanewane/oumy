@@ -7,6 +7,7 @@ const fetchWithAuth = async (endpoint, options = {}) => {
   
   const config = {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),

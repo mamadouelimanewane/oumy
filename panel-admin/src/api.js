@@ -5,6 +5,7 @@ const fetchWithAuth = async (url, options = {}) => {
   const token = localStorage.getItem('admin_token');
   const response = await fetch(`${API_URL}${url}`, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -26,6 +27,7 @@ export const authAPI = {
   login: async (phone, password) => {
     const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, password }),
     });
