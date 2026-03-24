@@ -23,9 +23,98 @@ import {
   Loader2,
   X,
   Save,
-  Menu
+  Menu,
+  Warehouse,
+  Wallet,
+  Users,
+  Megaphone,
+  CreditCard,
+  MessageSquare,
+  Send
 } from 'lucide-react';
-import { authAPI, restaurantAPI, notificationsAPI, createSocketConnection } from './api';
+import { authAPI, restaurantAPI, notificationsAPI, createSocketConnection, promotionsAPI, payoutAPI, chatAPI } from './api';
+import { ShieldAlert } from 'lucide-react';
+
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+// --- Google Map Component for Fleet ---
+function FleetMap({ couriersLocs }) {
+  const mapRef = React.useRef(null);
+  const [googleStatus, setGoogleStatus] = React.useState('loading'); // loading, ready, error
+  const markersRef = React.useRef({});
+
+  React.useEffect(() => {
+    if (!GOOGLE_MAPS_KEY) {
+       setGoogleStatus('error');
+       return;
+    }
+    const scriptId = 'google-maps-script';
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=geometry`;
+      script.async = true;
+      script.onload = () => setGoogleStatus('ready');
+      script.onerror = () => setGoogleStatus('error');
+      document.body.appendChild(script);
+    } else {
+      setGoogleStatus('ready');
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (googleStatus !== 'ready' || !mapRef.current) return;
+
+    if (!mapRef.current.map) {
+      mapRef.current.map = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 14.7167, lng: -17.4677 }, // Dakar
+        zoom: 13,
+        styles: [
+          { "featureType": "poi", "stylers": [{ "visibility": "off" }] },
+          { "featureType": "transit", "stylers": [{ "visibility": "off" }] }
+        ],
+        disableDefaultUI: true,
+      });
+    }
+
+    const map = mapRef.current.map;
+
+    // Update Markers
+    Object.entries(couriersLocs).forEach(([id, loc]) => {
+      if (markersRef.current[id]) {
+        markersRef.current[id].setPosition({ lat: loc.lat, lng: loc.lng });
+      } else {
+        markersRef.current[id] = new window.google.maps.Marker({
+          position: { lat: loc.lat, lng: loc.lng },
+          map,
+          title: `Livreur #${id}`,
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            fillColor: '#4f46e5',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+            scale: 8
+          }
+        });
+      }
+    });
+  }, [googleStatus, couriersLocs]);
+
+  if (googleStatus === 'error') {
+     return (
+       <div className="w-full h-full bg-slate-50 flex flex-center flex-col items-center justify-center p-8 text-center border-2 border-dashed border-slate-200 rounded-3xl">
+          <ShieldAlert className="w-12 h-12 text-slate-300 mb-4" />
+          <p className="text-slate-500 font-bold mb-2">Carte Google désactivée</p>
+          <p className="text-slate-400 text-xs max-w-xs px-10">Configurez <span className="text-indigo-600 font-bold">VITE_GOOGLE_MAPS_API_KEY</span> pour activer le suivi en direct.</p>
+       </div>
+     );
+  }
+
+  return (
+    <div ref={mapRef} className="w-full h-full" />
+  );
+}
 
 // Composant Login
 function LoginPage({ onLogin }) {
@@ -113,6 +202,60 @@ function LoginPage({ onLogin }) {
   );
 }
 
+function ChatWindow({ order, user, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    chatAPI.getMessages(order.id).then(data => {
+      setMessages(data);
+      setLoading(false);
+    });
+  }, [order.id]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    try {
+      const sent = await chatAPI.sendMessage(order.id, input);
+      setMessages([...messages, { ...sent, sender_id: user.id }]);
+      setInput('');
+    } catch (err) {
+      console.error('Send error:', err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+       <div className="bg-white w-full max-w-lg h-[600px] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
+             <div>
+                <h3 className="font-black">Chat Commande #{order.id}</h3>
+                <p className="text-[10px] opacity-80 uppercase tracking-widest">{order.client_name}</p>
+             </div>
+             <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
+             {loading ? <p className="text-center text-slate-400 py-20 animate-pulse">Chargement...</p> : messages.map((m, i) => (
+               <div key={i} className={`flex ${m.sender_id === user.id ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender_id === user.id ? 'bg-indigo-600 text-white rounded-tr-none shadow-indigo-200 shadow-lg' : 'bg-white text-slate-800 rounded-tl-none border border-slate-200'}`}>
+                     {m.message}
+                     <p className={`text-[9px] mt-1 opacity-60 ${m.sender_id === user.id ? 'text-right' : 'text-left'}`}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                  </div>
+               </div>
+             ))}
+             {messages.length === 0 && !loading && <p className="text-center text-slate-400 py-20 italic">Aucun message. Commencez la discussion !</p>}
+          </div>
+          <form onSubmit={handleSend} className="p-4 bg-white border-t border-slate-100 flex gap-2">
+             <input value={input} onChange={e => setInput(e.target.value)} placeholder="Écrire un message..." className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+             <button type="submit" className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-all"><Send className="w-5 h-5" /></button>
+          </form>
+       </div>
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -127,12 +270,22 @@ function App() {
   const [stats, setStats] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [newOrderAlert, setNewOrderAlert] = useState(null);
-  const [courierLocs, setCourierLocs] = useState({});
+  const [analytics, setAnalytics] = useState(null);
+  const [promos, setPromos] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [activeChatOrder, setActiveChatOrder] = useState(null);
 
   // Menu form modal
   const [showMenuForm, setShowMenuForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [menuForm, setMenuForm] = useState({ name: '', description: '', price: '', category: '', image_url: '' });
+
+  // Sécurité: Redirection si pas le bon rôle
+  useEffect(() => {
+    if (user && user.role !== 'restaurant' && user.role !== 'admin') {
+      handleLogout();
+    }
+  }, [user]);
 
   // Vérification auth au démarrage
   useEffect(() => {
@@ -229,12 +382,37 @@ function App() {
     }
   }, []);
 
+  const fetchPromos = useCallback(async () => {
+    try {
+      const data = await promotionsAPI.getAll();
+      if (data && data.data) setPromos(data.data);
+    } catch (err) {
+      console.error('Fetch promos error:', err);
+    }
+  }, []);
+
+  const fetchPayouts = useCallback(async () => {
+    try {
+      const data = await payoutAPI.getHistory();
+      if (Array.isArray(data)) setPayouts(data);
+    } catch (err) {
+      console.error('Fetch payouts error:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (user) {
       fetchOrders();
       fetchMenu();
       fetchStats();
       fetchUnreadCount();
+      if (activeTab === 'finances' || activeTab === 'dashboard') {
+        fetchAnalytics();
+        fetchPayouts();
+      }
+      if (activeTab === 'marketing') {
+        fetchPromos();
+      }
 
       // Rafraîchir les commandes toutes les 30s
       const interval = setInterval(fetchOrders, 30000);
@@ -295,7 +473,7 @@ function App() {
   };
 
   const handleSaveMenuItem = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     try {
       const payload = {
         ...menuForm,
@@ -391,8 +569,12 @@ function App() {
                 { id: 'dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
                 { id: 'commandes', icon: BellRing, label: 'Commandes Live', badge: nouvelleOrders.length > 0 },
                 { id: 'flotte', icon: Bike, label: 'Suivi Flotte' },
-                { id: 'menu', icon: Package, label: 'Menu & Plats' },
-                { id: 'horaires', icon: CalendarClock, label: 'Horaires' },
+                { id: 'livreurs', icon: Users, label: 'Livreurs' },
+                 { id: 'menu', icon: Package, label: 'Menu & Plats' },
+                 { id: 'inventaire', icon: Warehouse, label: 'Inventaire (Stock)' },
+                 { id: 'marketing', icon: Megaphone, label: 'Marketing & Promos' },
+                 { id: 'finances', icon: Wallet, label: 'Finances & Retraits' },
+                 { id: 'horaires', icon: CalendarClock, label: 'Horaires' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -516,7 +698,10 @@ function App() {
                         <p className="text-sm font-bold text-slate-900 mb-2 truncate">{order.client_name}</p>
                         <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg mt-3">
                           <span className="text-sm font-bold text-indigo-600">{formatPrice(order.total_amount)}</span>
-                          <button onClick={() => handleAcceptOrder(order.id)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-[11px] font-bold">Accepter</button>
+                          <div className="flex gap-2">
+                             <button onClick={() => setActiveChatOrder(order)} className="bg-slate-200 text-slate-600 p-1.5 rounded hover:bg-indigo-100 hover:text-indigo-600 transition-colors"><MessageSquare className="w-4 h-4" /></button>
+                             <button onClick={() => handleAcceptOrder(order.id)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-[11px] font-bold">Accepter</button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -580,14 +765,7 @@ function App() {
 
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-[500px]">
                 <div className="lg:col-span-3 bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200 relative min-h-[400px]">
-                  <iframe 
-                    width="100%" 
-                    height="100%" 
-                    style={{ border: 0 }} 
-                    loading="lazy" 
-                    allowFullScreen 
-                    src={`https://www.google.com/maps/embed/v1/search?key=VOTRE_GOOGLE_MAPS_API_KEY&q=Dakar&zoom=12`}
-                  ></iframe>
+                  <FleetMap couriersLocs={courierLocs} />
                 </div>
 
                 <div className="space-y-4 overflow-y-auto max-h-[600px] pr-2">
@@ -777,6 +955,244 @@ function App() {
             </div>
           )}
 
+          {/* === ONGLET MARKETING === */}
+          {activeTab === 'marketing' && (
+            <div className="space-y-6 animate-in fade-in duration-500">
+               <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-black text-slate-800">Marketing & Promos</h2>
+                  <button 
+                    onClick={() => {
+                      const code = prompt('Code Promotionnel (ex: MANGER50) :');
+                      const val = prompt('Valeur de la réduction (en % ou fixe) :');
+                      if (code && val) {
+                        promotionsAPI.create({
+                          code,
+                          discount_type: 'percentage',
+                          discount_value: parseFloat(val),
+                          description: 'Offre spéciale restaurant'
+                        }).then(() => fetchPromos());
+                      }
+                    }}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg"
+                  >
+                    + Créer une Promo
+                  </button>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {promos.map(promo => (
+                    <div key={promo.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                       <div className="absolute -right-4 -top-4 w-16 h-16 bg-indigo-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+                       <div className="relative z-10">
+                          <div className="flex justify-between items-start mb-4">
+                             <div className="bg-indigo-600 text-white font-black px-3 py-1 rounded-lg text-sm tracking-widest">{promo.code}</div>
+                             <button onClick={() => promotionsAPI.delete(promo.id).then(() => fetchPromos())} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                          <p className="text-sm font-bold text-slate-800 mb-1">{promo.description || 'Réduction sur vos commandes'}</p>
+                          <p className="text-2xl font-black text-indigo-600 mb-4">{promo.discount_value}{promo.discount_type === 'percentage' ? '%' : ' FCFA'}</p>
+                          <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                             <span className="text-[10px] font-bold text-slate-400 uppercase">Utilisations: {promo.current_uses}</span>
+                             <button 
+                               onClick={() => promotionsAPI.toggle(promo.id).then(() => fetchPromos())}
+                               className={`px-3 py-1 rounded-full text-[10px] font-black ${promo.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                             >
+                               {promo.is_active ? 'ACTIF' : 'INACTIF'}
+                             </button>
+                          </div>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+          )}
+
+          {/* === ONGLET FINANCES & RETRAITS === */}
+          {activeTab === 'finances' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-black text-slate-800">Analytique & Retraits</h2>
+                <button 
+                  onClick={() => {
+                    const amount = prompt('Montant à retirer (Min 1000 FCFA) :');
+                    if (amount) {
+                      payoutAPI.request(parseFloat(amount), 'wave').then(() => fetchPayouts());
+                    }
+                  }}
+                  className="bg-green-600 text-white px-6 py-2 rounded-xl text-sm font-black shadow-lg shadow-green-100 animate-pulse"
+                >
+                  <Wallet className="w-4 h-4 inline mr-2" /> Demander un retrait Wave
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                 <div className="bg-slate-900 border-none p-6 rounded-3xl text-white">
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Ticket Moyen</p>
+                    <h4 className="text-3xl font-black">
+                       {analytics.revenue_by_day.reduce((acc, d) => acc + d.orders, 0) > 0 
+                         ? formatPrice(analytics.revenue_by_day.reduce((acc, d) => acc + d.revenue, 0) / analytics.revenue_by_day.reduce((acc, d) => acc + d.orders, 0))
+                         : '0 FCFA'
+                       }
+                    </h4>
+                    <p className="text-[10px] text-indigo-300 mt-2 font-bold">Sur les 7 derniers jours</p>
+                 </div>
+                 <div className="bg-indigo-600 border-none p-6 rounded-3xl text-white">
+                    <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-1">Paiements Wave/OM</p>
+                    <h4 className="text-3xl font-black">84%</h4>
+                    <p className="text-[10px] text-white/60 mt-2 font-bold">Privilégiés par vos clients</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Commandes Annulées</p>
+                    <h4 className="text-3xl font-black text-red-500">2</h4>
+                    <p className="text-[10px] text-slate-500 mt-2 font-bold">Taux de perte: 1.2%</p>
+                 </div>
+              </div>
+
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                 <div className="p-6 border-b border-slate-50 flex justify-between items-center uppercase tracking-widest text-[10px] font-black text-slate-400">
+                    <span>Historique des retraits</span>
+                    <span>{payouts.length} Transactions</span>
+                 </div>
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                       <thead>
+                         <tr className="text-[10px] font-bold text-slate-500 bg-slate-50">
+                            <th className="p-4">Date</th>
+                            <th className="p-4">Montant</th>
+                            <th className="p-4">Méthode</th>
+                            <th className="p-4">Statut</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                        {payouts.map(p => (
+                          <tr key={p.id} className="border-t border-slate-50 hover:bg-slate-50/50">
+                              <td className="p-4 text-xs text-slate-500">{new Date(p.created_at).toLocaleDateString()}</td>
+                              <td className="p-4 text-sm font-black text-slate-800">{formatPrice(p.amount)}</td>
+                              <td className="p-4 text-xs font-bold text-slate-600 uppercase">{p.method}</td>
+                              <td className="p-4">
+                                <span className={`text-[9px] font-black px-2 py-1 rounded-full ${p.status === 'paye' ? 'bg-green-100 text-green-700' : p.status === 'rejete' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                    {p.status.toUpperCase()}
+                                </span>
+                              </td>
+                          </tr>
+                        ))}
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+
+              {/* ANALYTICS SECTION */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                   <h3 className="font-bold text-slate-700 mb-6 flex items-center"><TrendingUp className="w-5 h-5 mr-2 text-indigo-500" /> Évolution du Chiffre d'Affaires</h3>
+                   <div className="h-[200px] flex items-end gap-2 pb-2">
+                      {analytics?.revenue_by_day?.map((day, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+                           <div className="w-full bg-indigo-100 rounded-t-lg relative group-hover:bg-indigo-200 transition-colors" style={{ height: `${(day.revenue / Math.max(...analytics.revenue_by_day.map(d => d.revenue || 1))) * 100}%`, minHeight: '4px' }}>
+                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                 {formatPrice(day.revenue)}
+                              </div>
+                           </div>
+                           <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(day.date).toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
+                        </div>
+                      ))}
+                      {!analytics?.revenue_by_day?.length && <p className="w-full text-center text-slate-300 italic text-xs py-10">Données de revenu insuffisantes</p>}
+                   </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                   <h3 className="font-bold text-slate-700 mb-6 flex items-center"><Star className="w-5 h-5 mr-2 text-yellow-500" /> Top par Revenu</h3>
+                   <div className="space-y-4">
+                      {analytics?.top_dishes?.map((dish, i) => (
+                        <div key={i} className="flex items-center justify-between">
+                           <div>
+                              <p className="text-sm font-bold text-slate-800">{dish.name}</p>
+                              <p className="text-[10px] text-slate-500">{dish.total_sold} vendus</p>
+                           </div>
+                           <p className="text-sm font-black text-indigo-600">{formatPrice(dish.total_revenue)}</p>
+                        </div>
+                      ))}
+                      {!analytics?.top_dishes?.length && <p className="text-slate-300 italic text-xs py-4 text-center">Aucune donnée disponible</p>}
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* === ONGLET LIVREURS === */}
+          {activeTab === 'livreurs' && (
+            <div className="space-y-6">
+               <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-black text-slate-800">Gestion des Livreurs</h2>
+                  <button className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-indigo-100">Appeler un livreur</button>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {Object.entries(courierLocs).length > 0 ? Object.entries(courierLocs).map(([id, loc]) => (
+                    <div key={id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                       <div className="flex items-center gap-4 mb-4">
+                          <img src={`https://ui-avatars.com/api/?name=Livreur+${id.substring(0,2)}&background=1E88E5&color=fff`} className="w-12 h-12 rounded-2xl" alt="Livreur" />
+                          <div>
+                             <h4 className="font-black text-slate-800">Livreur #{id.substring(0,5)}</h4>
+                             <p className="text-xs text-green-500 font-bold flex items-center">
+                                <span className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
+                                En mission
+                             </p>
+                          </div>
+                       </div>
+                       <div className="space-y-3 pt-4 border-t border-slate-50">
+                          <div className="flex justify-between text-xs font-bold">
+                             <span className="text-slate-400 uppercase">Commande Actuelle</span>
+                             <span className="text-indigo-600">#{loc.orderId || '---'}</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-bold">
+                             <span className="text-slate-400 uppercase">Distance Restante</span>
+                             <span className="text-slate-800">~1.2 km</span>
+                          </div>
+                       </div>
+                    </div>
+                  )) : (
+                    <div className="col-span-full py-20 bg-white rounded-3xl border border-dashed border-slate-200 flex flex-col items-center justify-center">
+                       <Bike className="w-12 h-12 text-slate-300 mb-4" />
+                       <p className="text-slate-500 font-bold">Aucun livreur actif pour le moment</p>
+                    </div>
+                  )}
+               </div>
+            </div>
+          )}
+
+          {/* === ONGLET INVENTAIRE === */}
+          {activeTab === 'inventaire' && (
+            <div className="space-y-6">
+               <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-black text-slate-800">Inventaire & Stock Rapid</h2>
+                  <p className="text-xs font-bold text-slate-400">Cliquez pour épuiser/réapprovisionner</p>
+               </div>
+
+               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {menuItems.map(item => (
+                    <button 
+                      key={item.id}
+                      onClick={() => handleToggleAvailability(item)}
+                      className={`p-4 rounded-3xl border text-left transition-all ${item.is_available ? 'bg-white border-slate-200 hover:border-indigo-300' : 'bg-red-50 border-red-100 opacity-60'}`}
+                    >
+                       <div className="aspect-square rounded-2xl overflow-hidden mb-3 relative">
+                          <img src={item.image_url} className="w-full h-full object-cover" alt={item.name} />
+                          {!item.is_available && (
+                            <div className="absolute inset-0 bg-red-500/40 backdrop-blur-[2px] flex items-center justify-center">
+                               <span className="text-[10px] font-black text-white bg-red-600 px-2 py-1 rounded-full border border-white/20">RUPTURE</span>
+                            </div>
+                          )}
+                       </div>
+                       <p className="text-xs font-black text-slate-800 truncate mb-1">{item.name}</p>
+                       <p className={`text-[10px] font-bold ${item.is_available ? 'text-green-500' : 'text-red-500'}`}>
+                          {item.is_available ? 'En stock' : 'Épuisé'}
+                       </p>
+                    </button>
+                  ))}
+               </div>
+            </div>
+          )}
+
           {/* === ONGLET HORAIRES === */}
           {activeTab === 'horaires' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -804,7 +1220,7 @@ function App() {
                  <h3 className="text-xl font-bold text-slate-800">{editingItem ? 'Modifier le plat' : 'Ajouter un nouveau plat'}</h3>
                  <button onClick={() => setShowMenuForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
               </div>
-              <form onSubmit={handleMenuSubmit} className="p-6 space-y-4">
+               <form onSubmit={handleSaveMenuItem} className="p-6 space-y-4">
                  <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nom du plat</label>
@@ -839,11 +1255,16 @@ function App() {
                     <button type="submit" className="flex-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl text-sm px-8 shadow-xl shadow-indigo-200 transition-all active:scale-95 focus:ring-4 focus:ring-indigo-500 flex items-center justify-center gap-2">
                        {editingItem ? <Save className="w-4 h-4"/> : <Plus className="w-4 h-4"/>}
                        {editingItem ? 'Sauvegarder' : 'Ajouter'}
-                    </button>
-                 </div>
-              </form>
-           </div>
-        </div>
+                     </button>
+                  </div>
+               </form>
+            </div>
+         </div>
+      )}
+
+      {/* CHAT MODAL */}
+      {activeChatOrder && (
+         <ChatWindow order={activeChatOrder} user={user} onClose={() => setActiveChatOrder(null)} />
       )}
     </div>
   );

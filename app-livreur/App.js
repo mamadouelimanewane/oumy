@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions, Animated, Easing, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Dimensions, Animated, Easing, Alert, ActivityIndicator, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { io } from 'socket.io-client';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -9,10 +8,16 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import polyline from '@mapbox/polyline';
 
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from './components/MapView';
+
 const { width, height } = Dimensions.get('window');
 
 // CONFIGURATION
-const API_URL = 'http://localhost:5000'; // À adapter selon IP locale ou prod
+const DEFAULT_API_URL = 'http://localhost:5000';
+const PROD_API_URL = 'https://oumy-orpin.vercel.app/api'; // Modifier si different
+const API_URL = (typeof window !== 'undefined' && window.location.hostname !== 'localhost') 
+  ? (window.location.origin.includes('vercel.app') ? window.location.origin + '/api' : PROD_API_URL)
+  : DEFAULT_API_URL;
 const LOCATIONIQ_KEY = Constants.expoConfig.extra.LOCATIONIQ_API_KEY;
 
 export default function App() {

@@ -74,6 +74,61 @@ export const adminAPI = {
     });
     return res.json();
   },
+
+  getCourierHistory: async (id, limit = 100) => {
+    const res = await fetchWithAuth(`/admin/couriers/${id}/location-history?limit=${limit}`);
+    return res.json();
+  },
+
+  getOrderHotspots: async () => {
+    const res = await fetchWithAuth('/admin/orders/hotspots');
+    return res.json();
+  },
+
+  getCourierStats: async (id) => {
+    const res = await fetchWithAuth(`/admin/couriers/${id}/stats`);
+    return res.json();
+  },
+};
+
+export const payoutsAPI = {
+  getAll: async () => {
+    const res = await fetchWithAuth('/payouts/all');
+    return res.json();
+  },
+  updateStatus: async (id, status, referenceId = '') => {
+    const res = await fetchWithAuth(`/payouts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, reference_id: referenceId }),
+    });
+    return res.json();
+  },
+};
+
+export const promotionsAPI = {
+  getAll: async (page = 1) => {
+    const res = await fetchWithAuth(`/promotions?page=${page}&limit=20`);
+    return res.json();
+  },
+  create: async (data) => {
+    const res = await fetchWithAuth('/promotions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  toggle: async (id) => {
+    const res = await fetchWithAuth(`/promotions/${id}/toggle`, {
+      method: 'PUT',
+    });
+    return res.json();
+  },
+  delete: async (id) => {
+    const res = await fetchWithAuth(`/promotions/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
 };
 
 export const notificationsAPI = {

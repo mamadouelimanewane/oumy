@@ -126,6 +126,78 @@ router.get('/couriers', async (req, res) => {
   }
 });
 
+// Historique de localisation d'un livreur
+router.get('/couriers/:id/location-history', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 100 } = req.query;
+
+    const result = await pool.query(
+      `SELECT latitude, longitude, created_at 
+       FROM courier_location_history 
+       WHERE courier_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get courier location history error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Points chauds des commandes (Heatmap)
+router.get('/orders/hotspots', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT latitude, longitude, total_amount 
+       FROM orders 
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+       AND created_at >= CURRENT_DATE - INTERVAL '30 days'`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get order hotspots error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Stats d'un livreur
+router.get('/couriers/:id/stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Moyenne du temps de livraison
+    const timeResult = await pool.query(
+      `SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at))/60) as avg_time
+       FROM orders 
+       WHERE courier_id = $1 AND status = 'livree'`,
+      [id]
+    );
+
+    // Evolution des revenus (7 derniers jours)
+    const revenueResult = await pool.query(
+      `SELECT DATE(created_at) as date, SUM(total_amount) as total
+       FROM orders 
+       WHERE courier_id = $1 AND status = 'livree'
+       AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      [id]
+    );
+
+    res.json({
+      avg_delivery_time: Math.round(timeResult.rows[0].avg_time || 0),
+      revenue_history: revenueResult.rows
+    });
+  } catch (err) {
+    console.error('Get courier stats error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // Liste des clients (paginé)
 router.get('/clients', async (req, res) => {
   try {

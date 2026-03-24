@@ -68,10 +68,10 @@ router.post('/validate', authenticate, [
   }
 });
 
-// === Routes Admin ===
+// === Routes Admin & Restaurant ===
 
-// Créer une promotion (admin)
-router.post('/', authenticate, authorize('admin'), [
+// Créer une promotion (admin ou restaurant)
+router.post('/', authenticate, authorize('admin', 'restaurant'), [
   body('code').trim().notEmpty().withMessage('Code requis'),
   body('discount_type').isIn(['percentage', 'fixed']).withMessage('Type invalide'),
   body('discount_value').isFloat({ min: 0 }).withMessage('Valeur invalide'),
@@ -80,7 +80,14 @@ router.post('/', authenticate, authorize('admin'), [
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { code, description, discount_type, discount_value, min_order_amount, max_uses, restaurant_id, starts_at, expires_at } = req.body;
+    const { code, description, discount_type, discount_value, min_order_amount, max_uses, starts_at, expires_at } = req.body;
+    let restaurant_id = null;
+
+    if (req.user.role === 'restaurant') {
+      restaurant_id = req.user.id;
+    } else {
+      restaurant_id = req.body.restaurant_id || null;
+    }
 
     const result = await pool.query(
       `INSERT INTO promotions (code, description, discount_type, discount_value, min_order_amount, max_uses, restaurant_id, starts_at, expires_at)
@@ -97,20 +104,28 @@ router.post('/', authenticate, authorize('admin'), [
   }
 });
 
-// Lister les promotions (admin)
-router.get('/', authenticate, authorize('admin'), async (req, res) => {
+// Lister les promotions (admin ou restaurant)
+router.get('/', authenticate, authorize('admin', 'restaurant'), async (req, res) => {
   try {
     const { page, limit, offset } = paginate(req.query);
+    const isRestaurant = req.user.role === 'restaurant';
 
-    const countResult = await pool.query('SELECT COUNT(*) as total FROM promotions');
-    const result = await pool.query(
-      `SELECT p.*, r.name as restaurant_name
-       FROM promotions p
-       LEFT JOIN users r ON p.restaurant_id = r.id
-       ORDER BY p.created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
+    let countSQL = 'SELECT COUNT(*) as total FROM promotions';
+    let dataSQL = `SELECT p.*, r.name as restaurant_name
+                   FROM promotions p
+                   LEFT JOIN users r ON p.restaurant_id = r.id`;
+    const params = [];
+
+    if (isRestaurant) {
+      countSQL += ' WHERE restaurant_id = $1';
+      dataSQL += ' WHERE p.restaurant_id = $1';
+      params.push(req.user.id);
+    }
+
+    dataSQL += ' ORDER BY p.created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+
+    const countResult = await pool.query(countSQL, params);
+    const result = await pool.query(dataSQL, [...params, limit, offset]);
 
     res.json(paginatedResponse(result.rows, countResult.rows[0].total, { page, limit }));
   } catch (err) {
@@ -119,13 +134,19 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// Activer/Désactiver une promotion (admin)
-router.put('/:id/toggle', authenticate, authorize('admin'), async (req, res) => {
+// Activer/Désactiver une promotion
+router.put('/:id/toggle', authenticate, authorize('admin', 'restaurant'), async (req, res) => {
   try {
-    const result = await pool.query(
-      'UPDATE promotions SET is_active = NOT is_active WHERE id = $1 RETURNING *',
-      [req.params.id]
-    );
+    const isRestaurant = req.user.role === 'restaurant';
+    let query = 'UPDATE promotions SET is_active = NOT is_active WHERE id = $1';
+    const params = [req.params.id];
+
+    if (isRestaurant) {
+      query += ' AND restaurant_id = $2';
+      params.push(req.user.id);
+    }
+
+    const result = await pool.query(query + ' RETURNING *', params);
 
     if (result.rows.length === 0) return res.status(404).json({ error: 'Promotion non trouvée' });
 
@@ -136,10 +157,19 @@ router.put('/:id/toggle', authenticate, authorize('admin'), async (req, res) => 
   }
 });
 
-// Supprimer une promotion (admin)
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+// Supprimer une promotion
+router.delete('/:id', authenticate, authorize('admin', 'restaurant'), async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM promotions WHERE id = $1 RETURNING id', [req.params.id]);
+    const isRestaurant = req.user.role === 'restaurant';
+    let query = 'DELETE FROM promotions WHERE id = $1';
+    const params = [req.params.id];
+
+    if (isRestaurant) {
+      query += ' AND restaurant_id = $2';
+      params.push(req.user.id);
+    }
+
+    const result = await pool.query(query + ' RETURNING id', params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Promotion non trouvée' });
     res.json({ message: 'Promotion supprimée' });
   } catch (err) {

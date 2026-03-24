@@ -28,12 +28,13 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "VOTRE_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyBDVyKoHTYVigoZhlwfk3ZRmhRTGPpGEdw"
         }
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "baseUrl": "/livreur/"
     },
     "extra": {
       "eas": { "projectId": "78862722-d3f2-4d56-85fa-fd481b5521f0" },

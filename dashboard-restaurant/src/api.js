@@ -140,6 +140,50 @@ export const notificationsAPI = {
   },
 };
 
+// Promotions API
+export const promotionsAPI = {
+  getAll: async () => {
+    const res = await fetchWithAuth('/promotions');
+    return res.json();
+  },
+  create: async (data) => {
+    const res = await fetchWithAuth('/promotions', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  },
+  toggle: async (id) => {
+    const res = await fetchWithAuth(`/promotions/${id}/toggle`, { method: 'PUT' });
+    return res.json();
+  },
+  delete: async (id) => {
+    const res = await fetchWithAuth(`/promotions/${id}`, { method: 'DELETE' });
+    return res.json();
+  },
+};
+
+// Payout API
+export const payoutAPI = {
+  request: async (amount, method) => {
+    const res = await fetchWithAuth('/payouts/request', { method: 'POST', body: JSON.stringify({ amount, method }) });
+    return res.json();
+  },
+  getHistory: async () => {
+    const res = await fetchWithAuth('/payouts/history');
+    return res.json();
+  },
+};
+
+// Chat API
+export const chatAPI = {
+  getMessages: async (orderId) => {
+    const res = await fetchWithAuth(`/chat/${orderId}`);
+    return res.json();
+  },
+  sendMessage: async (orderId, message) => {
+    const res = await fetchWithAuth(`/chat/${orderId}`, { method: 'POST', body: JSON.stringify({ message }) });
+    return res.json();
+  },
+};
+
 // Socket.IO connection
 export const createSocketConnection = async (token) => {
   const { io } = await import('socket.io-client');

@@ -26,6 +26,7 @@ const promotionRoutes = require('./routes/promotions');
 const addressRoutes = require('./routes/addresses');
 const chatRoutes = require('./routes/chat');
 const loyaltyRoutes = require('./routes/loyalty');
+const payoutRoutes = require('./routes/payouts');
 
 const app = express();
 const server = http.createServer(app);
@@ -109,6 +110,9 @@ app.use('/api/chat', chatRoutes);
 // Loyalty routes
 app.use('/api/loyalty', loyaltyRoutes);
 
+// Payouts routes
+app.use('/api/payouts', payoutRoutes);
+
 // ==========================================
 // 🔌 SOCKET.IO - Temps Réel
 // ==========================================
@@ -174,6 +178,13 @@ io.on('connection', (socket) => {
          VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
          ON CONFLICT (courier_id) 
          DO UPDATE SET latitude = $2, longitude = $3, updated_at = CURRENT_TIMESTAMP`,
+        [socket.user.id, latitude, longitude]
+      );
+      
+      // Enregistrer l'historique
+      await pool.query(
+        `INSERT INTO courier_location_history (courier_id, latitude, longitude)
+         VALUES ($1, $2, $3)`,
         [socket.user.id, latitude, longitude]
       );
 
