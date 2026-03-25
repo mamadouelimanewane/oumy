@@ -1,0 +1,25 @@
+{
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/livreur/(.*)",
+      "destination": "/livreur/index.html"
+    },
+    {
+      "source": "/restaurant/(.*)",
+      "destination": "/restaurant/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
