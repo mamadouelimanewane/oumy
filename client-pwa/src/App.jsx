@@ -1,5 +1,42 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Fuse from 'fuse.js';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix Leaflet Default Icon
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Fix Leaflet Default Icon
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+function LocationMarker() {
+  const [position, setPosition] = React.useState(null);
+  const map = useMap();
+
+  React.useEffect(() => {
+    map.locate().on("locationfound", function (e) {
+      setPosition(e.latlng);
+      map.flyTo(e.latlng, 14);
+    });
+  }, [map]);
+
+  return position === null ? null : (
+    <Marker position={position}>
+      <Popup>📍 Vous êtes ici</Popup>
+    </Marker>
+  );
+}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -144,9 +181,23 @@ function App() {
 
   const totalPanier = panier.reduce((acc, p) => acc + (p.price * p.qty), 0);
 
+  const RESTAURANTS_DATA = {
+    "Alkimia": { lat: 14.743, lng: -17.513, desc: "Restaurant gastronomique, spécialités de la mer aux Almadies" },
+    "Le Lagon 1": { lat: 14.667, lng: -17.433, desc: "Fruits de mer avec vue imprenable sur l'océan, Plateau" },
+    "Radisson Blu": { lat: 14.693, lng: -17.473, desc: "Restaurant de l'hôtel 5 étoiles, Sea Plaza" },
+    "Terrou-Bi": { lat: 14.685, lng: -17.465, desc: "Gastronomie et cadre luxueux sur la Corniche" },
+    "KFC Sea Plaza": { lat: 14.693, lng: -17.473, desc: "Le célèbre poulet frit" },
+    "Burger King": { lat: 14.693, lng: -17.473, desc: "Burgers grillés à la flamme" },
+    "Chez Loutcha": { lat: 14.668, lng: -17.435, desc: "Cuisine généreuse sénégalaise et cap-verdienne" },
+    "La Fourchette": { lat: 14.666, lng: -17.432, desc: "Cuisine internationale et fusion au Plateau" },
+    "Le Djoloff": { lat: 14.685, lng: -17.471, desc: "Restaurant boutique hôtel à Fann Hock" },
+    "Noflaye Beach": { lat: 14.750, lng: -17.520, desc: "Crêperie et grillades en bord de mer, Almadies" },
+    "Chef Ousmane (Dark Kitchen)": { lat: 14.710, lng: -17.460, desc: "Saveurs authentiques faites maison" },
+    "Sen Burger Dakar": { lat: 14.692, lng: -17.465, desc: "Fast-food de qualité 100% sénégalais" }
+  };
+
   // DONNÉES STATIQUES (50 plats certifiés) - garantit l'affichage même sans serveur
   const STATIC_PLATS = [
-    { id:1, name:"Le Classique", description:"Steak haché pur bœuf, cheddar, salade, tomate", price:3500, category:"Fast Food", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80", rating:"4.7", deliveryTime:"20-30 min", featured:false },
     { id:2, name:"Tiep Bou Dien Rouge", description:"Le plat national sénégalais avec du poisson et riz rouge", price:3000, category:"Sénégalais", restaurant_name:"Chef Ousmane (Dark Kitchen)", image_url:"https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&q=80", rating:"4.9", deliveryTime:"25-35 min", featured:true },
     { id:3, name:"Pizza Margherita", description:"Sauce tomate, mozzarella fraîche, basilic", price:5000, category:"Pizza", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=500&q=80", rating:"4.5", deliveryTime:"20-30 min", featured:false },
     { id:4, name:"Jus de Bissap", description:"Délicieux jus d'hibiscus rafraîchissant", price:1000, category:"Jus Locaux", restaurant_name:"Chef Ousmane (Dark Kitchen)", image_url:"https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", rating:"4.8", deliveryTime:"10-15 min", featured:false },
@@ -196,6 +247,17 @@ function App() {
     { id:48, name:"Pizza Végétarienne", description:"Légumes rôtis, roquette, copeaux de parmesan", price:5500, category:"Pizza", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1571066811602-716837d681de?w=500&q=80", rating:"4.5", deliveryTime:"25-35 min", featured:false },
     { id:49, name:"Salade Grecque", description:"Concombre, feta, olives noires, tomates, origan", price:3500, category:"Salades", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&q=80", rating:"4.6", deliveryTime:"10-20 min", featured:false },
     { id:50, name:"Lakh", description:"Semoule au lait caillé sucré, dessert traditionnel sénégalais", price:1500, category:"Desserts", restaurant_name:"Chef Ousmane (Dark Kitchen)", image_url:"https://images.unsplash.com/photo-1488477181946-6428a0291777?w=500&q=80", rating:"4.8", deliveryTime:"10-15 min", featured:true },
+    { id:1, name:"Le Classique", description:"Steak haché pur bœuf, cheddar, salade, tomate", price:3500, category:"Fast Food", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80", rating:"4.7", deliveryTime:"20-30 min", featured:false },
+    { id:51, name:"Thiof Braisé", description:"Mérou blanc braisé aux épices douces, frites de patate douce", price:12000, category:"Grillades", restaurant_name:"Le Lagon 1", image_url:"https://images.unsplash.com/photo-1544979144-411a76d4dfba?w=500&q=80", rating:"4.9", deliveryTime:"35-45 min", featured:true },
+    { id:52, name:"Filet de Bœuf Rossini", description:"Filet mignon, foie gras, sauce aux truffes", price:25000, category:"Gastronomie", restaurant_name:"Terrou-Bi", image_url:"https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&q=80", rating:"5.0", deliveryTime:"40-50 min", featured:true },
+    { id:53, name:"Bucket 10 Pièces", description:"10 pièces de poulet frit croustillant, frites familiales", price:15000, category:"Fast Food", restaurant_name:"KFC Sea Plaza", image_url:"https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=500&q=80", rating:"4.5", deliveryTime:"20-30 min", featured:false },
+    { id:54, name:"Whopper", description:"Le légendaire burger au bœuf grillé à la flamme", price:4500, category:"Fast Food", restaurant_name:"Burger King", image_url:"https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?w=500&q=80", rating:"4.6", deliveryTime:"15-25 min", featured:true },
+    { id:55, name:"Catchupa", description:"Ragoût cap-verdien riche au maïs, haricots, viandes", price:4000, category:"Africain", restaurant_name:"Chez Loutcha", image_url:"https://images.unsplash.com/photo-1602253057119-44d745d9b860?w=500&q=80", rating:"4.8", deliveryTime:"25-35 min", featured:true },
+    { id:56, name:"Sushi Boat", description:"Assortiment premium de 24 sushis, makis et sashimis", price:22000, category:"Asiatique", restaurant_name:"La Fourchette", image_url:"https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=500&q=80", rating:"4.9", deliveryTime:"30-40 min", featured:false },
+    { id:57, name:"Brunch Royal", description:"Viennoiseries, saumon fumé, œufs bénédictine, jus frais", price:18000, category:"Brunch", restaurant_name:"Radisson Blu", image_url:"https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=500&q=80", rating:"4.7", deliveryTime:"30-45 min", featured:false },
+    { id:58, name:"Ceviche de Daurade", description:"Daurade fraîche marinée au citron vert et fruit de la passion", price:11000, category:"Gastronomie", restaurant_name:"Alkimia", image_url:"https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&q=80", rating:"4.8", deliveryTime:"25-35 min", featured:false },
+    { id:59, name:"Crevettes à la Plancha", description:"Grandes crevettes grillées, riz safrané, sauce à l'ail", price:8000, category:"Grillades", restaurant_name:"Le Djoloff", image_url:"https://images.unsplash.com/photo-1559742811-822873691fc8?w=500&q=80", rating:"4.7", deliveryTime:"25-35 min", featured:false },
+    { id:60, name:"Crêpe Complète", description:"Jambon, œuf, fromage, champignons sur galette sarrasin", price:4500, category:"Crêpes", restaurant_name:"Noflaye Beach", image_url:"https://images.unsplash.com/photo-1519676867240-f03562e64548?w=500&q=80", rating:"4.6", deliveryTime:"20-30 min", featured:true }
   ];
 
   // FETCH BDD (essai live, fallback sur données statiques)
@@ -838,6 +900,42 @@ function App() {
         </main>
       )}
 
+      {/* PAGE CARTE (GEOLOCALISATION) */}
+      {activePage === 'carte' && (
+        <main className="h-screen w-full relative pb-20">
+          <div className="absolute top-6 left-6 right-6 z-[400] bg-white/90 backdrop-blur-xl shadow-xl rounded-2xl p-4 border border-gray-100 flex items-center gap-4">
+             <div className="bg-primary/10 p-3 rounded-xl text-primary">📍</div>
+             <div>
+               <h3 className="font-black text-gray-900 leading-tight">Carte des Restaurants</h3>
+               <p className="text-xs font-bold text-gray-500">Trouvez les meilleures adresses autour de vous</p>
+             </div>
+          </div>
+          <MapContainer center={[14.693, -17.473]} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+            />
+            <LocationMarker />
+            {Object.entries(RESTAURANTS_DATA).map(([name, data]) => (
+              <Marker key={name} position={[data.lat, data.lng]}>
+                <Popup className="rounded-2xl">
+                  <div className="text-center p-1">
+                    <h4 className="font-black text-gray-900 text-sm mb-1">{name}</h4>
+                    <p className="text-xs text-gray-500 mb-2">{data.desc}</p>
+                    <button 
+                      onClick={() => { setSelectedRestaurant(name); setActivePage('restaurant-detail'); }}
+                      className="bg-primary text-white text-[10px] font-black px-3 py-1.5 rounded-lg w-full"
+                    >
+                      Voir le Menu
+                    </button>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </main>
+      )}
+
       {/* PAGE RESTAURANTS */}
       {activePage === 'restaurants' && (
         <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
@@ -883,10 +981,25 @@ function App() {
               <div className="relative z-10">
                 <span className="bg-primary/90 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase">Restaurant</span>
                 <h2 className="text-3xl font-black mt-3">{selectedRestaurant}</h2>
-                <div className="flex items-center gap-4 mt-4">
+                <div className="flex items-center gap-4 mt-4 mb-6">
                   <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">⭐ 4.8</span>
                   <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">🕐 20-35 min</span>
                 </div>
+                {RESTAURANTS_DATA[selectedRestaurant] && (
+                  <div className="h-40 rounded-2xl overflow-hidden border-4 border-white/10 shadow-inner mt-4 relative z-20">
+                    <MapContainer 
+                      center={[RESTAURANTS_DATA[selectedRestaurant].lat, RESTAURANTS_DATA[selectedRestaurant].lng]} 
+                      zoom={15} 
+                      style={{ height: '100%', width: '100%' }}
+                      zoomControl={false}
+                      dragging={false}
+                      scrollWheelZoom={false}
+                    >
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <Marker position={[RESTAURANTS_DATA[selectedRestaurant].lat, RESTAURANTS_DATA[selectedRestaurant].lng]} />
+                    </MapContainer>
+                  </div>
+                )}
               </div>
             </div>
             <h3 className="text-xl font-black text-gray-900 mb-4">Menu 🍽️</h3>
@@ -915,6 +1028,7 @@ function App() {
           {[
             { id:'explorer', label:'Explorer', icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
             { id:'restaurants', label:'Restaurants', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
+            { id:'carte', label:'Carte', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg> },
             { id:'panier', label:'Panier', badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
             { id:'commandes', label:'Commandes', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> },
             { id:'profil', label:'Profil', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
