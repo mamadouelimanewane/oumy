@@ -122,7 +122,7 @@ function App() {
       carte_gratter: 'Carte à Gratter', historique_gains: 'Historique des gains',
       tourner: 'Tourner la roue !', gratter: 'Gratter !', mode_sombre: 'Mode Sombre',
       langue: 'Langue', envoyer: 'Envoyer', chat_livreur: 'Chat Livreur',
-      se_connecter: 'Se connecter', livrer_a: 'Livrer à',
+      se_connecter: 'Se connecter', livrer_a: 'Livrer à', restaurants: 'Restaurants',
     },
     wo: {
       explorer: 'Wut', panier: 'Paañe', commandes: 'Commandes yi', profil: 'Sàmm',
@@ -143,7 +143,7 @@ function App() {
       carte_gratter: 'Carte bu Gratter', historique_gains: 'Liggéey gains yi',
       tourner: 'Wëndeelu roue bi !', gratter: 'Grattee !', mode_sombre: 'Leer bu Lëndëm',
       langue: 'Làkk', envoyer: 'Yónnee', chat_livreur: 'Chat ak livreur bi',
-      se_connecter: 'Duggu', livrer_a: 'Yóbbu ci',
+      se_connecter: 'Duggu', livrer_a: 'Yóbbu ci', restaurants: 'Restoraan yi',
     }
   };
 
@@ -1664,6 +1664,37 @@ function App() {
         </main>
       )}
 
+      {/* PAGE RESTAURANTS */}
+      {activePage === 'restaurants' && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-3xl font-black text-gray-900 mb-6 tracking-tight">{T[lang].restaurants} 🏪</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean).map(restName => {
+                 const restPlats = plats.filter(p => p.restaurant_name === restName);
+                 const firstPlat = restPlats[0];
+                 return (
+                   <div key={restName} onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }} className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden cursor-pointer hover:shadow-xl transition-all group">
+                     <div className="h-40 w-full relative overflow-hidden">
+                       <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
+                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                       <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                         <span className="text-white font-black text-xl line-clamp-1">{restName}</span>
+                         <span className="bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg text-white text-[10px] font-bold">20-30 min</span>
+                       </div>
+                     </div>
+                     <div className="p-4 flex justify-between items-center bg-white">
+                       <span className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full text-xs font-bold text-gray-700">⭐ {firstPlat?.rating || '4.5'}</span>
+                       <span className="text-sm font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{restPlats.length} {lang === 'fr' ? 'plats' : 'lekk yi'}</span>
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
+          </div>
+        </main>
+      )}
+
       {/* PAGE RESTAURANT DETAIL */}
       {activePage === 'restaurant-detail' && selectedRestaurant && (
         <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
@@ -1944,6 +1975,7 @@ function App() {
         <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
           {[
             { id:'explorer', label: T[lang].explorer, icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
+            { id:'restaurants', label: T[lang].restaurants, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
             { id:'panier', label: T[lang].panier, badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
             { id:'commandes', label: T[lang].commandes, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> },
             { id:'profil', label: T[lang].profil, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
