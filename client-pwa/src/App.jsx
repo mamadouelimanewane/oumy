@@ -24,6 +24,7 @@ function App() {
   const [orders, setOrders] = useState([]);
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [courierLoc, setCourierLoc] = useState(null);
+  const [selectedRestaurant, setSelectedRestaurant] = useState(null);
 
   // AUTH CHECK
   useEffect(() => {
@@ -393,22 +394,7 @@ function App() {
           </div>
         </div>
 
-        {/* Featured / Dark Kitchen Promo */}
-        <div className="mt-8 bg-gradient-to-r from-secondary via-slate-800 to-gray-900 rounded-[40px] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden group">
-          <div className="relative z-10 w-full md:w-1/2">
-            <span className="bg-primary text-xs font-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-lg shadow-primary/20">Exclusivité Dakar</span>
-            <h3 className="text-3xl md:text-5xl font-black mt-4 leading-tight">Dark Kitchens 👻</h3>
-            <p className="text-lg text-gray-400 mt-2 mb-8 font-medium">Soutenez les restaurateurs locaux et profitez de saveurs authentiques faites maison.</p>
-            <button className="text-base font-bold bg-white text-secondary px-8 py-4 rounded-2xl hover:bg-gray-100 transition-all hover:px-10 shadow-xl">
-              Explorer les menus
-            </button>
-          </div>
-          <img 
-            src="https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" 
-            alt="Promo" 
-            className="hidden md:block absolute -right-20 -bottom-20 w-[500px] h-[500px] object-cover rounded-full opacity-60 border-8 border-white/5 transition-transform duration-700 group-hover:scale-110"
-          />
-        </div>
+
 
         {/* Restaurants List */}
         <div className="mt-12">
@@ -829,6 +815,7 @@ function App() {
         <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
           {[
             { id:'explorer', label:'Explorer', icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
+            { id:'restaurants', label:'Restaurants', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
             { id:'panier', label:'Panier', badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
             { id:'commandes', label:'Commandes', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> },
             { id:'profil', label:'Profil', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
