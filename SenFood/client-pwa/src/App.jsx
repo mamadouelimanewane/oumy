@@ -742,22 +742,7 @@ function App() {
           </div>
         </div>
 
-        {/* Featured / Dark Kitchen Promo */}
-        <div className="mt-8 bg-gradient-to-r from-secondary via-slate-800 to-gray-900 rounded-[40px] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden group">
-          <div className="relative z-10 w-full md:w-1/2">
-            <span className="bg-primary text-xs font-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-lg shadow-primary/20">Exclusivité Dakar</span>
-            <h3 className="text-3xl md:text-5xl font-black mt-4 leading-tight">Dark Kitchens 👻</h3>
-            <p className="text-lg text-gray-400 mt-2 mb-8 font-medium">Soutenez les restaurateurs locaux et profitez de saveurs authentiques faites maison.</p>
-            <button className="text-base font-bold bg-white text-secondary px-8 py-4 rounded-2xl hover:bg-gray-100 transition-all hover:px-10 shadow-xl">
-              Explorer les menus
-            </button>
-          </div>
-          <img 
-            src="https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" 
-            alt="Promo" 
-            className="hidden md:block absolute -right-20 -bottom-20 w-[500px] h-[500px] object-cover rounded-full opacity-60 border-8 border-white/5 transition-transform duration-700 group-hover:scale-110"
-          />
-        </div>
+
 
         {/* Restaurants List */}
         <div className="mt-12">
