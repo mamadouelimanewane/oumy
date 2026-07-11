@@ -392,12 +392,40 @@ function App() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
             </div>
           </div>
+        </div>        {/* Restaurants Partenaires (Accueil) */}
+        <div className="mt-8 mb-12">
+          <div className="flex justify-between items-end mb-6 px-2">
+            <div>
+              <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">Nos Restaurants</h2>
+              <p className="text-gray-500 font-medium mt-1">Découvrez nos partenaires</p>
+            </div>
+            <button onClick={() => setActivePage('restaurants')} className="text-primary text-sm md:text-base font-bold hover:underline bg-primary/10 px-4 py-2 rounded-xl transition-all">Voir tout</button>
+          </div>
+          <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-hide -mx-6 px-6 lg:mx-0 lg:px-0">
+            {Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean).map(restName => {
+               const restPlats = plats.filter(p => p.restaurant_name === restName);
+               const firstPlat = restPlats[0];
+               return (
+                 <div key={restName} onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }} className="min-w-[280px] md:min-w-[320px] bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer hover:shadow-xl transition-all group flex-shrink-0">
+                   <div className="h-36 w-full relative overflow-hidden">
+                     <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                     <div className="absolute bottom-3 left-4 right-4">
+                       <span className="text-white font-black text-lg line-clamp-1">{restName}</span>
+                     </div>
+                   </div>
+                   <div className="p-3 flex justify-between items-center bg-white">
+                     <span className="flex items-center gap-1 bg-orange-50 text-orange-600 px-2.5 py-1 rounded-lg text-xs font-black">⭐ {firstPlat?.rating || '4.5'}</span>
+                     <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{restPlats.length} plats</span>
+                   </div>
+                 </div>
+               );
+            })}
+          </div>
         </div>
 
-
-
-        {/* Restaurants List */}
-        <div className="mt-12">
+        {/* Plats List */}
+        <div className="mt-8">
           <div className="flex justify-between items-end mb-8 px-2">
             <div>
               <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">
@@ -822,16 +850,15 @@ function App() {
                  return (
                    <div key={restName} onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }} className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden cursor-pointer hover:shadow-xl transition-all group">
                      <div className="h-40 w-full relative overflow-hidden">
-                       <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
+                       <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                       <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-                         <span className="text-white font-black text-xl line-clamp-1">{restName}</span>
-                         <span className="bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg text-white text-[10px] font-bold">20-30 min</span>
+                       <div className="absolute bottom-4 left-4 right-4">
+                         <h3 className="text-white font-black text-xl line-clamp-1 m-0">{restName}</h3>
                        </div>
                      </div>
                      <div className="p-4 flex justify-between items-center bg-white">
-                       <span className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full text-xs font-bold text-gray-700">⭐ {firstPlat?.rating || '4.5'}</span>
-                       <span className="text-sm font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{restPlats.length} plats</span>
+                       <span className="flex items-center gap-1 bg-orange-50 text-orange-600 px-3 py-1 rounded-xl text-sm font-black">⭐ {firstPlat?.rating || '4.5'}</span>
+                       <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">{restPlats.length} plats</span>
                      </div>
                    </div>
                  );
