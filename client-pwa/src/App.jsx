@@ -810,6 +810,78 @@ function App() {
         </main>
       )}
 
+      {/* PAGE RESTAURANTS */}
+      {activePage === 'restaurants' && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-3xl font-black text-gray-900 mb-6 tracking-tight">Restaurants 🏪</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean).map(restName => {
+                 const restPlats = plats.filter(p => p.restaurant_name === restName);
+                 const firstPlat = restPlats[0];
+                 return (
+                   <div key={restName} onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }} className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden cursor-pointer hover:shadow-xl transition-all group">
+                     <div className="h-40 w-full relative overflow-hidden">
+                       <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
+                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                       <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                         <span className="text-white font-black text-xl line-clamp-1">{restName}</span>
+                         <span className="bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg text-white text-[10px] font-bold">20-30 min</span>
+                       </div>
+                     </div>
+                     <div className="p-4 flex justify-between items-center bg-white">
+                       <span className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full text-xs font-bold text-gray-700">⭐ {firstPlat?.rating || '4.5'}</span>
+                       <span className="text-sm font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{restPlats.length} plats</span>
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* PAGE RESTAURANT DETAIL */}
+      {activePage === 'restaurant-detail' && selectedRestaurant && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-2xl mx-auto">
+            <button onClick={() => setActivePage('restaurants')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              Retour
+            </button>
+            <div className="bg-gradient-to-br from-secondary to-gray-900 rounded-[32px] p-8 text-white shadow-2xl mb-8 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-20">
+                <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80" className="w-full h-full object-cover" alt="" />
+              </div>
+              <div className="relative z-10">
+                <span className="bg-primary/90 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase">Restaurant</span>
+                <h2 className="text-3xl font-black mt-3">{selectedRestaurant}</h2>
+                <div className="flex items-center gap-4 mt-4">
+                  <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">⭐ 4.8</span>
+                  <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">🕐 20-35 min</span>
+                </div>
+              </div>
+            </div>
+            <h3 className="text-xl font-black text-gray-900 mb-4">Menu 🍽️</h3>
+            <div className="space-y-4">
+              {plats.filter(p => p.restaurant_name === selectedRestaurant).map(plat => (
+                <div key={plat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex gap-4 items-center cursor-pointer" onClick={() => addToPanier(plat)}>
+                  <img src={plat.image_url} alt={plat.name} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" loading="lazy" />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-gray-900 text-sm">{plat.name}</h4>
+                    <p className="text-xs text-gray-400 line-clamp-1">{plat.description}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-primary font-black">{plat.price.toLocaleString()} FCFA</span>
+                      <button className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-orange-600 transition-colors">+</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+      )}
+
       {/* BOTTOM NAV BAR */}
       <nav className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.07)] z-50">
         <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
