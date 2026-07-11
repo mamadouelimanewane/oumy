@@ -475,7 +475,7 @@ function App() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
             </div>
           </div>
-        </div>        {/* Restaurants Partenaires (Accueil) */}
+        </div>        {/* Restaurants Partenaires - Bande Défilante Auto */}
         <div className="mt-8 mb-12">
           <div className="flex justify-between items-end mb-6 px-2">
             <div>
@@ -484,26 +484,50 @@ function App() {
             </div>
             <button onClick={() => setActivePage('restaurants')} className="text-primary text-sm md:text-base font-bold hover:underline bg-primary/10 px-4 py-2 rounded-xl transition-all">Voir tout</button>
           </div>
-          <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-hide -mx-6 px-6 lg:mx-0 lg:px-0">
-            {Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean).map(restName => {
-               const restPlats = plats.filter(p => p.restaurant_name === restName);
-               const firstPlat = restPlats[0];
-               return (
-                 <div key={restName} onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }} className="min-w-[280px] md:min-w-[320px] bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer hover:shadow-xl transition-all group flex-shrink-0">
-                   <div className="h-36 w-full relative overflow-hidden">
-                     <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                     <div className="absolute bottom-3 left-4 right-4">
-                       <span className="text-white font-black text-lg line-clamp-1">{restName}</span>
-                     </div>
-                   </div>
-                   <div className="p-3 flex justify-between items-center bg-white">
-                     <span className="flex items-center gap-1 bg-orange-50 text-orange-600 px-2.5 py-1 rounded-lg text-xs font-black">⭐ {firstPlat?.rating || '4.5'}</span>
-                     <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{restPlats.length} plats</span>
-                   </div>
-                 </div>
-               );
-            })}
+          {/* Marquee container */}
+          <div className="overflow-hidden -mx-6">
+            <style>{`
+              @keyframes marquee {
+                0% { transform: translateX(0); }
+                100% { transform: translateX(-50%); }
+              }
+              .marquee-track {
+                display: flex;
+                animation: marquee 28s linear infinite;
+                width: max-content;
+              }
+              .marquee-track:hover {
+                animation-play-state: paused;
+              }
+            `}</style>
+            <div className="marquee-track gap-5" style={{gap:'20px'}}>
+              {[...Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean),
+                ...Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean)
+              ].map((restName, idx) => {
+                const restPlats = plats.filter(p => p.restaurant_name === restName);
+                const firstPlat = restPlats[0];
+                return (
+                  <div
+                    key={`${restName}-${idx}`}
+                    onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }}
+                    className="flex-shrink-0 bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden cursor-pointer hover:shadow-2xl hover:scale-[1.03] transition-all duration-300 group"
+                    style={{width:'260px', marginRight:'20px'}}
+                  >
+                    <div className="h-36 w-full relative overflow-hidden">
+                      <img src={firstPlat?.image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"></div>
+                      <div className="absolute bottom-3 left-4 right-4">
+                        <span className="text-white font-black text-base line-clamp-1 drop-shadow">{restName}</span>
+                      </div>
+                    </div>
+                    <div className="px-4 py-3 flex justify-between items-center">
+                      <span className="flex items-center gap-1 text-orange-500 text-xs font-black">⭐ {firstPlat?.rating || '4.5'}</span>
+                      <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">{restPlats.length} plats</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
