@@ -67,6 +67,86 @@ function App() {
   const searchRef = useRef(null);
   const inputRef = useRef(null);
 
+  // === LIVRAISON STATE ===
+  const [userPosition, setUserPosition] = useState(null); // {lat, lng}
+  const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [activeLivraison, setActiveLivraison] = useState(null); // null | livraison object
+  const [livreurPosition, setLivreurPosition] = useState(null); // position simulée en mouvement
+  const [livraisonStep, setLivraisonStep] = useState(0); // 0=prép 1=en route 2=livré
+  const [selectedLivreur, setSelectedLivreur] = useState(null); // pour la page admin livreurs
+  const livraisonInterval = useRef(null);
+
+  // 5 Livreurs fictifs à Dakar
+  const LIVREURS = [
+    { id:1, name:"Moussa Diallo", phone:"77 432 10 98", avatar:"https://ui-avatars.com/api/?name=Moussa+Diallo&background=f97316&color=fff&size=100", lat:14.698, lng:-17.468, status:"disponible", courses:8, note:4.9, revenus:12400 },
+    { id:2, name:"Ibrahima Fall", phone:"76 543 21 09", avatar:"https://ui-avatars.com/api/?name=Ibrahima+Fall&background=22c55e&color=fff&size=100", lat:14.685, lng:-17.453, status:"en_course", courses:5, note:4.7, revenus:8750 },
+    { id:3, name:"Fatou Sarr", phone:"78 654 32 10", avatar:"https://ui-avatars.com/api/?name=Fatou+Sarr&background=8b5cf6&color=fff&size=100", lat:14.710, lng:-17.480, status:"disponible", courses:11, note:5.0, revenus:17600 },
+    { id:4, name:"Abdou Ndiaye", phone:"70 765 43 21", avatar:"https://ui-avatars.com/api/?name=Abdou+Ndiaye&background=3b82f6&color=fff&size=100", lat:14.675, lng:-17.445, status:"hors_ligne", courses:0, note:4.8, revenus:0 },
+    { id:5, name:"Aminata Diouf", phone:"77 876 54 32", avatar:"https://ui-avatars.com/api/?name=Aminata+Diouf&background=ef4444&color=fff&size=100", lat:14.702, lng:-17.460, status:"disponible", courses:6, note:4.6, revenus:9800 },
+  ];
+
+  // Calcul distance GPS (formule Haversine)
+  const haversineKm = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  // Calcul prix livraison
+  const calcDeliveryPrice = (userLat, userLng, restLat, restLng) => {
+    const dist = haversineKm(userLat, userLng, restLat, restLng);
+    const dureeMin = (dist / 25) * 60; // 25 km/h vitesse moto
+    const base = 500;
+    const parKm = Math.round(dist * 200);
+    const parMin = Math.round(dureeMin * 30);
+    return { total: base + parKm + parMin, dist: dist.toFixed(1), duree: Math.round(dureeMin), base, parKm, parMin };
+  };
+
+  // Géolocalisation utilisateur automatique
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude: lat, longitude: lng } = pos.coords;
+          setUserPosition({ lat, lng });
+          // Calcul prix délivraison par défaut depuis plateau
+          const priceData = calcDeliveryPrice(lat, lng, 14.693, -17.473);
+          setDeliveryPrice(priceData.total);
+        },
+        () => {
+          // Fallback: Plateau Dakar
+          setUserPosition({ lat: 14.693, lng: -17.450 });
+          setDeliveryPrice(800);
+        }
+      );
+    }
+  }, []);
+
+  // Simulation du mouvement du livreur vers le client
+  const startLivraisonSimulation = (livreur, destLat, destLng) => {
+    let step = 0;
+    const totalSteps = 30;
+    const startLat = livreur.lat;
+    const startLng = livreur.lng;
+    setLivreurPosition({ lat: startLat, lng: startLng });
+    setLivraisonStep(1);
+    if (livraisonInterval.current) clearInterval(livraisonInterval.current);
+    livraisonInterval.current = setInterval(() => {
+      step++;
+      const progress = step / totalSteps;
+      const curLat = startLat + (destLat - startLat) * progress;
+      const curLng = startLng + (destLng - startLng) * progress;
+      setLivreurPosition({ lat: curLat, lng: curLng });
+      if (step >= totalSteps) {
+        clearInterval(livraisonInterval.current);
+        setLivraisonStep(2);
+      }
+    }, 2000); // toutes les 2 secondes
+  };
+
+
   // AUTH CHECK
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
@@ -1260,15 +1340,269 @@ function App() {
         </main>
       )}
 
+      {/* ============================================================
+          PAGE LIVRAISONS
+      ============================================================ */}
+      {activePage === 'livraisons' && (
+        <main className="min-h-screen bg-neutral-50 pb-32">
+          {/* Tabs Livraisons */}
+          <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
+            <div className="max-w-2xl mx-auto px-6 pt-6 pb-0">
+              <h2 className="text-2xl font-black text-gray-900 mb-4">Livraisons 🛵</h2>
+              <div className="flex gap-4">
+                {['suivi', 'livreurs', 'tarifs'].map(t => (
+                  <button key={t} onClick={() => setSelectedLivreur(t)}
+                    className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${
+                      selectedLivreur === t ? 'border-primary text-primary' : 'border-transparent text-gray-400'
+                    }`}>
+                    {t === 'suivi' ? '📍 Suivi' : t === 'livreurs' ? '🛵 Livreurs' : '💰 Tarifs'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* --- ONGLET SUIVI --- */}
+          {(selectedLivreur === 'suivi' || !selectedLivreur) && (
+            <div className="max-w-2xl mx-auto px-6 pt-6">
+              {activeLivraison ? (
+                <>
+                  {/* Statuts */}
+                  <div className="flex items-center justify-between mb-6">
+                    {['⏳ Préparation', '🛵 En route', '✅ Livré'].map((s, i) => (
+                      <div key={i} className={`flex flex-col items-center gap-1 ${
+                        i <= livraisonStep ? 'opacity-100' : 'opacity-30'
+                      }`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-black border-2 ${
+                          i < livraisonStep ? 'bg-green-500 border-green-500 text-white' :
+                          i === livraisonStep ? 'bg-primary border-primary text-white animate-pulse' :
+                          'bg-white border-gray-200'
+                        }`}>{i + 1}</div>
+                        <span className="text-[9px] font-bold text-center leading-tight max-w-[60px]">{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Carte de suivi */}
+                  <div className="rounded-3xl overflow-hidden shadow-xl mb-6" style={{height: '280px'}}>
+                    <MapContainer
+                      center={userPosition ? [userPosition.lat, userPosition.lng] : [14.693, -17.473]}
+                      zoom={14} style={{height:'100%', width:'100%'}} zoomControl={false}
+                    >
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      {userPosition && (
+                        <Marker position={[userPosition.lat, userPosition.lng]}>
+                          <Popup>📍 Votre adresse</Popup>
+                        </Marker>
+                      )}
+                      {livreurPosition && (
+                        <Marker position={[livreurPosition.lat, livreurPosition.lng]}>
+                          <Popup>🛵 Votre livreur</Popup>
+                        </Marker>
+                      )}
+                    </MapContainer>
+                  </div>
+                  {/* Fiche livreur */}
+                  <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+                    <img src={activeLivraison.livreur.avatar} className="w-16 h-16 rounded-2xl object-cover" alt="" />
+                    <div className="flex-1">
+                      <p className="font-black text-gray-900">{activeLivraison.livreur.name}</p>
+                      <p className="text-xs text-gray-400">⭐ {activeLivraison.livreur.note} · Livreur vérifié</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`text-xs font-black px-3 py-1 rounded-full ${
+                          livraisonStep === 0 ? 'bg-yellow-100 text-yellow-700' :
+                          livraisonStep === 1 ? 'bg-blue-100 text-blue-700 animate-pulse' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {livraisonStep === 0 ? '⏳ Prépare votre commande' :
+                           livraisonStep === 1 ? '🛵 En route vers vous' :
+                           '✅ Commande livrée !'}
+                        </span>
+                      </div>
+                    </div>
+                    <a href={`tel:${activeLivraison.livreur.phone}`}
+                      className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 hover:bg-green-100 transition-colors">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                    </a>
+                  </div>
+                  {/* Facture */}
+                  <div className="bg-gradient-to-br from-secondary to-slate-800 rounded-3xl p-6 text-white mt-4">
+                    <h3 className="font-black text-lg mb-4">Facture de livraison 🧾</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-white/60">Tarif de base</span><span className="font-bold">500 FCFA</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Distance ({activeLivraison.priceData?.dist} km × 200)</span><span className="font-bold">{activeLivraison.priceData?.parKm} FCFA</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Durée ({activeLivraison.priceData?.duree} min × 30)</span><span className="font-bold">{activeLivraison.priceData?.parMin} FCFA</span></div>
+                      <div className="border-t border-white/20 pt-2 flex justify-between text-base">
+                        <span className="font-black">Total livraison</span>
+                        <span className="font-black text-primary">{activeLivraison.priceData?.total?.toLocaleString()} FCFA</span>
+                      </div>
+                    </div>
+                  </div>
+                  {livraisonStep === 2 && (
+                    <button onClick={() => { setActiveLivraison(null); setLivraisonStep(0); setLivreurPosition(null); }}
+                      className="mt-6 w-full bg-green-500 text-white font-black py-5 rounded-3xl shadow-xl">
+                      ✅ Confirmer la réception
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-20">
+                  <div className="text-7xl mb-4">🛵</div>
+                  <h3 className="text-xl font-black text-gray-900 mb-2">Aucune livraison active</h3>
+                  <p className="text-gray-500 text-sm mb-8">Vos livraisons en cours apparaîtront ici</p>
+                  <button onClick={() => setActivePage('explorer')} className="bg-primary text-white font-black px-8 py-4 rounded-2xl shadow-xl shadow-primary/20">
+                    Commander maintenant
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- ONGLET LIVREURS --- */}
+          {selectedLivreur === 'livreurs' && (
+            <div className="max-w-2xl mx-auto px-6 pt-6">
+              {/* Carte des livreurs */}
+              <div className="rounded-3xl overflow-hidden shadow-xl mb-6" style={{height:'220px'}}>
+                <MapContainer center={[14.693, -17.465]} zoom={13} style={{height:'100%',width:'100%'}} zoomControl={false}>
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  {LIVREURS.map(l => (
+                    <Marker key={l.id} position={[l.lat, l.lng]}>
+                      <Popup>
+                        <div className="text-center">
+                          <p className="font-black text-sm">{l.name}</p>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            l.status==='disponible' ? 'bg-green-100 text-green-700' :
+                            l.status==='en_course' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {l.status==='disponible'?'🟢 Disponible':l.status==='en_course'?'🟡 En course':'⚫ Hors ligne'}
+                          </span>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              </div>
+              {/* Stats rapides */}
+              <div className="grid grid-cols-3 gap-3 mb-6">
+                <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
+                  <p className="text-2xl font-black text-green-500">{LIVREURS.filter(l=>l.status==='disponible').length}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Dispos</p>
+                </div>
+                <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
+                  <p className="text-2xl font-black text-yellow-500">{LIVREURS.filter(l=>l.status==='en_course').length}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">En course</p>
+                </div>
+                <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
+                  <p className="text-2xl font-black text-gray-400">{LIVREURS.filter(l=>l.status==='hors_ligne').length}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Hors ligne</p>
+                </div>
+              </div>
+              {/* Liste livreurs */}
+              <div className="space-y-4">
+                {LIVREURS.map(l => (
+                  <div key={l.id} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-4">
+                      <img src={l.avatar} className="w-14 h-14 rounded-2xl" alt="" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="font-black text-gray-900">{l.name}</p>
+                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
+                            l.status==='disponible'?'bg-green-100 text-green-700':
+                            l.status==='en_course'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-500'
+                          }`}>
+                            {l.status==='disponible'?'🟢 Disponible':l.status==='en_course'?'🟡 En course':'⚫ Hors ligne'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{l.phone}</p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-xs font-bold text-gray-600">⭐ {l.note}</span>
+                          <span className="text-xs font-bold text-gray-400">{l.courses} courses</span>
+                          <span className="text-xs font-black text-primary">{l.revenus.toLocaleString()} F</span>
+                        </div>
+                      </div>
+                    </div>
+                    {l.status === 'disponible' && (
+                      <button
+                        onClick={() => {
+                          const dest = userPosition || { lat: 14.693, lng: -17.450 };
+                          const restLat = 14.693, restLng = -17.473;
+                          const priceData = calcDeliveryPrice(dest.lat, dest.lng, restLat, restLng);
+                          setActiveLivraison({ livreur: l, priceData });
+                          startLivraisonSimulation(l, dest.lat, dest.lng);
+                          setSelectedLivreur('suivi');
+                        }}
+                        className="mt-4 w-full bg-primary/10 text-primary font-black text-sm py-3 rounded-2xl hover:bg-primary hover:text-white transition-all">
+                        🛵 Assigner une livraison test
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* --- ONGLET TARIFS --- */}
+          {selectedLivreur === 'tarifs' && (
+            <div className="max-w-2xl mx-auto px-6 pt-6">
+              {/* Formule */}
+              <div className="bg-gradient-to-br from-primary to-orange-600 rounded-3xl p-6 text-white mb-6 shadow-xl">
+                <h3 className="font-black text-xl mb-2">Formule de calcul</h3>
+                <p className="text-white/70 text-sm mb-4">Prix calculé en temps réel selon votre position</p>
+                <div className="bg-white/20 rounded-2xl p-4 font-mono text-sm">
+                  Prix = Base + (km × 200) + (min × 30)
+                </div>
+              </div>
+              {/* Grille tarifaire */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-4">
+                <h3 className="font-black text-gray-900 mb-4">Grille tarifaire</h3>
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left">
+                    <th className="pb-3 text-[10px] font-black text-gray-400 uppercase">Composante</th>
+                    <th className="pb-3 text-[10px] font-black text-gray-400 uppercase text-right">Prix</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    <tr><td className="py-3 text-gray-700 font-medium">Tarif de base</td><td className="py-3 text-right font-black">500 FCFA</td></tr>
+                    <tr><td className="py-3 text-gray-700 font-medium">Par kilomètre</td><td className="py-3 text-right font-black">200 FCFA/km</td></tr>
+                    <tr><td className="py-3 text-gray-700 font-medium">Par minute</td><td className="py-3 text-right font-black">30 FCFA/min</td></tr>
+                    <tr><td className="py-3 text-gray-700 font-medium">Vitesse moto</td><td className="py-3 text-right font-black text-gray-400">25 km/h</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              {/* Simulateur */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                <h3 className="font-black text-gray-900 mb-4">Simulateur de prix</h3>
+                {userPosition ? (
+                  <div className="space-y-3">
+                    {Object.entries(RESTAURANTS_DATA).slice(0, 6).map(([name, data]) => {
+                      const pd = calcDeliveryPrice(userPosition.lat, userPosition.lng, data.lat, data.lng);
+                      return (
+                        <div key={name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                          <div>
+                            <p className="font-bold text-gray-900 text-sm">{name}</p>
+                            <p className="text-xs text-gray-400">{pd.dist} km · {pd.duree} min</p>
+                          </div>
+                          <span className="font-black text-primary">{pd.total.toLocaleString()} FCFA</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">Activez la géolocalisation pour voir les estimations</p>
+                )}
+              </div>
+            </div>
+          )}
+        </main>
+      )}
+
       {/* BOTTOM NAV BAR */}
       <nav className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.07)] z-50">
         <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
           {[
             { id:'explorer', label:'Explorer', icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
-            { id:'restaurants', label:'Restaurants', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
-            { id:'carte', label:'Carte', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg> },
+            { id:'restaurants', label:'Restau', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
+            { id:'livraisons', label:'Livraison', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> },
             { id:'panier', label:'Panier', badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
-            { id:'commandes', label:'Commandes', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> },
+            { id:'carte', label:'Carte', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg> },
             { id:'profil', label:'Profil', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
           ].map(tab => (
             <button
