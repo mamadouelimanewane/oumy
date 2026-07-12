@@ -63,7 +63,9 @@ function App() {
   const [courierLoc, setCourierLoc] = useState(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const searchRef = useRef(null);
+  const inputRef = useRef(null);
 
   // AUTH CHECK
   useEffect(() => {
@@ -335,7 +337,7 @@ function App() {
 
   // Résultats live pour le dropdown de suggestions
   const searchResults = useMemo(() => {
-    if (searchQuery.trim().length < 2) return { restaurants: [], plats: [] };
+    if (searchQuery.trim().length < 2) return { restaurants: [], plats: [], allItems: [] };
     const results = fuse.search(searchQuery);
     const seen = new Set();
     const matchedRestaurants = [];
@@ -347,8 +349,24 @@ function App() {
       }
       if (matchedPlats.length < 5) matchedPlats.push(item);
     });
-    return { restaurants: matchedRestaurants.slice(0, 4), plats: matchedPlats };
+    const allItems = [
+      ...matchedRestaurants.slice(0, 4).map(r => ({ type: 'restaurant', label: r })),
+      ...matchedPlats.map(p => ({ type: 'plat', label: p.name, plat: p }))
+    ];
+    return { restaurants: matchedRestaurants.slice(0, 4), plats: matchedPlats, allItems };
   }, [searchQuery, fuse]);
+
+  // Ghost text: complète la saisie avec le premier résultat
+  const ghostHint = useMemo(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) return '';
+    const first = searchResults.allItems[0];
+    if (!first) return '';
+    const label = first.label;
+    if (label.toLowerCase().startsWith(searchQuery.toLowerCase())) {
+      return searchQuery + label.slice(searchQuery.length);
+    }
+    return '';
+  }, [searchQuery, searchResults]);
 
 
   const filteredPlats = useMemo(() => {
@@ -445,23 +463,68 @@ function App() {
             <h1 className="text-3xl md:text-5xl font-extrabold text-primary mb-8 tracking-tight">manger aujourd'hui ?</h1>
           </div>
 
-          {/* Search Bar with Live Suggestions */}
+          {/* Search Bar with Ghost-text Autocomplete */}
           <div className="relative max-w-xl" ref={searchRef}>
             <div className={`glass rounded-2xl flex items-center p-2 group transition-all ${
-              searchOpen && searchQuery ? 'ring-4 ring-primary/25 rounded-b-none border-b border-gray-200/50' : 'focus-within:ring-4 focus-within:ring-primary/20'
+              searchOpen && searchQuery ? 'ring-4 ring-primary/25 rounded-b-none' : 'focus-within:ring-4 focus-within:ring-primary/20'
             }`}>
               <svg className="w-6 h-6 text-gray-500 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
-                onFocus={() => setSearchOpen(true)}
-                onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-                placeholder="Plat, restaurant, cuisine..."
-                className="w-full bg-transparent border-none focus:outline-none text-gray-800 px-3 placeholder-gray-500 font-medium"
-              />
+
+              {/* Ghost text layer + real input stacked */}
+              <div className="relative flex-1 mx-3 h-8 flex items-center">
+                {/* Ghost text (behind the real input) */}
+                {ghostHint && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 flex items-center pointer-events-none select-none font-medium text-base"
+                    style={{whiteSpace:'pre'}}
+                  >
+                    <span className="text-transparent">{searchQuery}</span>
+                    <span className="text-gray-400/60">{ghostHint.slice(searchQuery.length)}</span>
+                  </span>
+                )}
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); setActiveIndex(-1); }}
+                  onFocus={() => setSearchOpen(true)}
+                  onBlur={() => setTimeout(() => { setSearchOpen(false); setActiveIndex(-1); }, 150)}
+                  onKeyDown={(e) => {
+                    const items = searchResults.allItems;
+                    if (e.key === 'Tab' || e.key === 'ArrowRight') {
+                      if (ghostHint) { e.preventDefault(); setSearchQuery(ghostHint); setActiveIndex(-1); }
+                    } else if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setActiveIndex(i => Math.min(i + 1, items.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setActiveIndex(i => Math.max(i - 1, -1));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const selected = items[activeIndex];
+                      if (selected) {
+                        if (selected.type === 'restaurant') {
+                          setSelectedRestaurant(selected.label); setActivePage('restaurant-detail');
+                        } else {
+                          addToPanier(selected.plat);
+                        }
+                        setSearchQuery(''); setSearchOpen(false); setActiveIndex(-1);
+                      } else if (ghostHint) {
+                        setSearchQuery(ghostHint);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setSearchOpen(false); setActiveIndex(-1); setSearchQuery('');
+                    }
+                  }}
+                  placeholder="Plat, restaurant, cuisine..."
+                  className="relative w-full bg-transparent border-none focus:outline-none text-gray-800 placeholder-gray-500 font-medium text-base"
+                  autoComplete="off"
+                />
+              </div>
+
               {searchQuery && (
-                <button onClick={() => { setSearchQuery(''); setSearchOpen(false); }} className="p-1 text-gray-400 hover:text-gray-600 mr-1 flex-shrink-0">
+                <button onClick={() => { setSearchQuery(''); setSearchOpen(false); setActiveIndex(-1); }} className="p-1 text-gray-400 hover:text-gray-600 mr-1 flex-shrink-0">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
               )}
@@ -469,6 +532,15 @@ function App() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
               </button>
             </div>
+
+            {/* Hint pill: Tab to accept */}
+            {ghostHint && searchOpen && activeIndex === -1 && (
+              <div className="absolute right-16 top-1/2 -translate-y-1/2 pointer-events-none">
+                <span className="text-[10px] font-black text-gray-400 bg-white/80 border border-gray-200 px-2 py-1 rounded-md tracking-wide">
+                  Tab ↵
+                </span>
+              </div>
+            )}
 
             {/* Dropdown suggestions */}
             {searchOpen && searchQuery.trim().length >= 2 && (searchResults.restaurants.length > 0 || searchResults.plats.length > 0) && (
@@ -480,20 +552,29 @@ function App() {
                     <div className="px-4 pt-3 pb-1">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">🏪 Restaurants</span>
                     </div>
-                    {searchResults.restaurants.map(restName => {
+                    {searchResults.restaurants.map((restName, idx) => {
                       const rImg = plats.find(p => p.restaurant_name === restName)?.image_url;
+                      const isActive = activeIndex === idx;
                       return (
                         <button
                           key={restName}
                           onMouseDown={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); setSearchQuery(''); setSearchOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50 transition-colors text-left group"
+                          onMouseEnter={() => setActiveIndex(idx)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group ${
+                            isActive ? 'bg-orange-50' : 'hover:bg-orange-50'
+                          }`}
                         >
                           <img src={rImg} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-gray-900 text-sm truncate">{restName}</p>
+                            <p className="font-bold text-gray-900 text-sm truncate">
+                              {restName.toLowerCase().startsWith(searchQuery.toLowerCase())
+                                ? <><span className="text-primary">{restName.slice(0, searchQuery.length)}</span>{restName.slice(searchQuery.length)}</>
+                                : restName
+                              }
+                            </p>
                             <p className="text-xs text-gray-400">{plats.filter(p => p.restaurant_name === restName).length} plats disponibles</p>
                           </div>
-                          <svg className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
+                          <svg className={`w-4 h-4 transition-colors ${isActive ? 'text-primary' : 'text-gray-300 group-hover:text-primary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
                         </button>
                       );
                     })}
@@ -511,34 +592,48 @@ function App() {
                     <div className="px-4 pt-3 pb-1">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">🍽️ Plats</span>
                     </div>
-                    {searchResults.plats.map(plat => (
-                      <button
-                        key={plat.id}
-                        onMouseDown={() => { addToPanier(plat); setSearchQuery(''); setSearchOpen(false); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50 transition-colors text-left group"
-                      >
-                        <img src={plat.image_url} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-900 text-sm truncate">{plat.name}</p>
-                          <p className="text-xs text-gray-400 truncate">{plat.restaurant_name}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-primary font-black text-sm">{plat.price.toLocaleString()} F</span>
-                          <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">+ Panier</span>
-                        </div>
-                      </button>
-                    ))}
+                    {searchResults.plats.map((plat, idx) => {
+                      const globalIdx = searchResults.restaurants.length + idx;
+                      const isActive = activeIndex === globalIdx;
+                      return (
+                        <button
+                          key={plat.id}
+                          onMouseDown={() => { addToPanier(plat); setSearchQuery(''); setSearchOpen(false); }}
+                          onMouseEnter={() => setActiveIndex(globalIdx)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group ${
+                            isActive ? 'bg-orange-50' : 'hover:bg-orange-50'
+                          }`}
+                        >
+                          <img src={plat.image_url} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-gray-900 text-sm truncate">
+                              {plat.name.toLowerCase().startsWith(searchQuery.toLowerCase())
+                                ? <><span className="text-primary">{plat.name.slice(0, searchQuery.length)}</span>{plat.name.slice(searchQuery.length)}</>
+                                : plat.name
+                              }
+                            </p>
+                            <p className="text-xs text-gray-400 truncate">{plat.restaurant_name}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className="text-primary font-black text-sm">{plat.price.toLocaleString()} F</span>
+                            <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">+ Panier</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
                 {/* Footer */}
-                <div className="border-t border-gray-100 px-4 py-2 bg-gray-50">
-                  <button
-                    onMouseDown={() => { setSearchOpen(false); }}
-                    className="text-xs text-primary font-bold hover:underline"
-                  >
+                <div className="border-t border-gray-100 px-4 py-2 bg-gray-50 flex items-center justify-between">
+                  <button onMouseDown={() => { setSearchOpen(false); }} className="text-xs text-primary font-bold hover:underline">
                     Voir tous les résultats pour "{searchQuery}"
                   </button>
+                  <span className="text-[10px] text-gray-400 hidden sm:flex items-center gap-2">
+                    <kbd className="bg-white border border-gray-200 rounded px-1">↑↓</kbd> naviguer
+                    <kbd className="bg-white border border-gray-200 rounded px-1">↵</kbd> valider
+                    <kbd className="bg-white border border-gray-200 rounded px-1">Esc</kbd> fermer
+                  </span>
                 </div>
               </div>
             )}
