@@ -62,6 +62,8 @@ function App() {
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [courierLoc, setCourierLoc] = useState(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
 
   // AUTH CHECK
   useEffect(() => {
@@ -319,27 +321,47 @@ function App() {
     { name: 'Chawarma', icon: '🌯' },
   ];
 
-  // Moteur de recherche sémantique (Fuse.js)
+  // Moteur de recherche sémantique (Fuse.js) — plats ET restaurants
   const fuse = useMemo(() => new Fuse(plats, {
-    keys: ['name', 'description', 'category'],
-    threshold: 0.4, // Sensibilité (0 = exact, 1 = n'importe quoi)
+    keys: [
+      { name: 'name',            weight: 0.5 },
+      { name: 'restaurant_name', weight: 0.3 },
+      { name: 'category',        weight: 0.1 },
+      { name: 'description',     weight: 0.1 },
+    ],
+    threshold: 0.35,
     includeScore: true
   }), [plats]);
 
+  // Résultats live pour le dropdown de suggestions
+  const searchResults = useMemo(() => {
+    if (searchQuery.trim().length < 2) return { restaurants: [], plats: [] };
+    const results = fuse.search(searchQuery);
+    const seen = new Set();
+    const matchedRestaurants = [];
+    const matchedPlats = [];
+    results.forEach(({ item }) => {
+      if (!seen.has(item.restaurant_name)) {
+        seen.add(item.restaurant_name);
+        matchedRestaurants.push(item.restaurant_name);
+      }
+      if (matchedPlats.length < 5) matchedPlats.push(item);
+    });
+    return { restaurants: matchedRestaurants.slice(0, 4), plats: matchedPlats };
+  }, [searchQuery, fuse]);
+
+
   const filteredPlats = useMemo(() => {
-    // 1. Appliquer d'abord la catégorie
-    let result = activeCategory === 'Tous' 
-      ? plats 
+    let result = activeCategory === 'Tous'
+      ? plats
       : plats.filter(p => p.category === activeCategory);
-
-    // 2. Appliquer la recherche (Sémantique si > 2 caractères)
     if (searchQuery.trim().length > 1) {
-      const searchResults = fuse.search(searchQuery);
-      result = searchResults.map(r => r.item);
+      const searchRes = fuse.search(searchQuery);
+      result = searchRes.map(r => r.item);
     }
-
     return result;
   }, [plats, activeCategory, searchQuery, fuse]);
+
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 relative">
@@ -423,27 +445,103 @@ function App() {
             <h1 className="text-3xl md:text-5xl font-extrabold text-primary mb-8 tracking-tight">manger aujourd'hui ?</h1>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative glass rounded-2xl flex items-center p-2 max-w-xl group focus-within:ring-4 focus-within:ring-primary/20 transition-all">
-            <svg className="w-6 h-6 text-gray-500 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <input 
-              type="text" 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher un plat, un restaurant..." 
-              className="w-full bg-transparent border-none focus:outline-none text-gray-800 px-3 placeholder-gray-500 font-medium"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery("")}
-                className="p-1 text-gray-400 hover:text-gray-600 mr-1"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          {/* Search Bar with Live Suggestions */}
+          <div className="relative max-w-xl" ref={searchRef}>
+            <div className={`glass rounded-2xl flex items-center p-2 group transition-all ${
+              searchOpen && searchQuery ? 'ring-4 ring-primary/25 rounded-b-none border-b border-gray-200/50' : 'focus-within:ring-4 focus-within:ring-primary/20'
+            }`}>
+              <svg className="w-6 h-6 text-gray-500 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                placeholder="Plat, restaurant, cuisine..."
+                className="w-full bg-transparent border-none focus:outline-none text-gray-800 px-3 placeholder-gray-500 font-medium"
+              />
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(''); setSearchOpen(false); }} className="p-1 text-gray-400 hover:text-gray-600 mr-1 flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+              )}
+              <button className="bg-primary hover:bg-orange-600 text-white rounded-xl p-3 transition-colors flex-shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
               </button>
+            </div>
+
+            {/* Dropdown suggestions */}
+            {searchOpen && searchQuery.trim().length >= 2 && (searchResults.restaurants.length > 0 || searchResults.plats.length > 0) && (
+              <div className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-xl rounded-b-2xl shadow-2xl border border-gray-100 border-t-0 z-[200] overflow-hidden max-h-[70vh] overflow-y-auto">
+
+                {/* Section Restaurants */}
+                {searchResults.restaurants.length > 0 && (
+                  <div>
+                    <div className="px-4 pt-3 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">🏪 Restaurants</span>
+                    </div>
+                    {searchResults.restaurants.map(restName => {
+                      const rImg = plats.find(p => p.restaurant_name === restName)?.image_url;
+                      return (
+                        <button
+                          key={restName}
+                          onMouseDown={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); setSearchQuery(''); setSearchOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50 transition-colors text-left group"
+                        >
+                          <img src={rImg} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-gray-900 text-sm truncate">{restName}</p>
+                            <p className="text-xs text-gray-400">{plats.filter(p => p.restaurant_name === restName).length} plats disponibles</p>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Divider */}
+                {searchResults.restaurants.length > 0 && searchResults.plats.length > 0 && (
+                  <div className="mx-4 border-t border-gray-100"></div>
+                )}
+
+                {/* Section Plats */}
+                {searchResults.plats.length > 0 && (
+                  <div className="pb-2">
+                    <div className="px-4 pt-3 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">🍽️ Plats</span>
+                    </div>
+                    {searchResults.plats.map(plat => (
+                      <button
+                        key={plat.id}
+                        onMouseDown={() => { addToPanier(plat); setSearchQuery(''); setSearchOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50 transition-colors text-left group"
+                      >
+                        <img src={plat.image_url} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-gray-900 text-sm truncate">{plat.name}</p>
+                          <p className="text-xs text-gray-400 truncate">{plat.restaurant_name}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-primary font-black text-sm">{plat.price.toLocaleString()} F</span>
+                          <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">+ Panier</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="border-t border-gray-100 px-4 py-2 bg-gray-50">
+                  <button
+                    onMouseDown={() => { setSearchOpen(false); }}
+                    className="text-xs text-primary font-bold hover:underline"
+                  >
+                    Voir tous les résultats pour "{searchQuery}"
+                  </button>
+                </div>
+              </div>
             )}
-            <button className="bg-primary hover:bg-orange-600 text-white rounded-xl p-3 transition-colors">
-               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
-            </button>
           </div>
         </div>
       </header>
