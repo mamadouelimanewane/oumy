@@ -6,7 +6,11 @@
 
 require('dotenv').config();
 
-const CONNECTION_STRING = process.env.DATABASE_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_SUPABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL;
+// DATABASE_URL/POSTGRES_URL (integration Neon actuelle) passent en premier :
+// les variables DATABASE_POSTGRES_*/DATABASE_SUPABASE_* restent presentes sur
+// Vercel mais pointent vers un projet Supabase supprime (integration
+// "Uninstalled", DNS ne resout plus) - ne pas les prioriser.
+const CONNECTION_STRING = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_POSTGRES_URL || process.env.DATABASE_SUPABASE_URL;
 const USE_POSTGRES = process.env.DB_TYPE === 'postgres' || process.env.DB_HOST || CONNECTION_STRING;
 
 let pool;
