@@ -17,9 +17,13 @@ if (USE_POSTGRES) {
   const { Pool } = require('pg');
   
   if (CONNECTION_STRING) {
-    // Connexion via URI complète (Auto-détecté par pg Pool)
+    // pg recent versions treat sslmode=require/prefer/verify-ca in the connection
+    // string as verify-full, which overrides an explicit ssl.rejectUnauthorized:false
+    // option below. Strip it so the object-level ssl option (scoped to this pool
+    // only, not process-wide) is what actually governs the connection.
+    const sanitizedConnectionString = CONNECTION_STRING.replace(/([?&])sslmode=[^&]*&?/i, '$1').replace(/[?&]$/, '');
     pool = new Pool({
-      connectionString: CONNECTION_STRING,
+      connectionString: sanitizedConnectionString,
       ssl: {
         rejectUnauthorized: false,
       },
