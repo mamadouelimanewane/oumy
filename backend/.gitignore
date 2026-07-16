@@ -1,4 +1,4 @@
 node_modules/
 .env
-senfood.db
+nooreat.db*
 *.log

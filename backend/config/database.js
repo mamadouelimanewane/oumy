@@ -77,6 +77,8 @@ if (USE_POSTGRES) {
     s = s.replace(/\bDEFAULT true\b/gi, 'DEFAULT 1');
     s = s.replace(/\bDEFAULT false\b/gi, 'DEFAULT 0');
     s = s.replace(/CURRENT_TIMESTAMP\s*\+\s*INTERVAL\s*'[^']+'/gi, "datetime('now', '+90 days')");
+    s = s.replace(/EXTRACT\(DOW FROM CURRENT_TIMESTAMP\)/gi, "CAST(strftime('%w','now') AS INTEGER)");
+    s = s.replace(/\bCURRENT_TIME\b/g, "strftime('%H:%M','now')");
     s = s.replace(/ON DELETE CASCADE/gi, '');
     // Remove RETURNING clause - we handle it separately
     s = s.replace(/\s+RETURNING\s+.*/gi, '');
