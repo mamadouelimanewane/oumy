@@ -6,62 +6,106 @@
 const bcrypt = require('bcrypt');
 const { pool, initDatabase } = require('./config/database');
 
+// Catalogue complet (12 restaurants Dakar, 81 plats) — porte depuis le catalogue
+// client-pwa developpe sur la racine du repo (commits du 11-12/07) qui n'existait
+// jusqu'ici que comme fallback statique cote client, jamais comme vraies donnees DB.
 const plats = [
-  { rest: 1, name: "Le Classique", desc: "Steak hache pur boeuf, cheddar, salade, tomate", price: 3500, img: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80", cat: "Fast Food" },
-  { rest: 2, name: "Tiep Bou Dien Rouge", desc: "Le plat national senegalais avec du poisson et riz rouge", price: 3000, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 1, name: "Pizza Margherita", desc: "Sauce tomate, mozzarella fraiche, basilic", price: 5000, img: "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=500&q=80", cat: "Pizza" },
-  { rest: 2, name: "Jus de Bissap", desc: "Delicieux jus d'hibiscus rafraichissant", price: 1000, img: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", cat: "Jus Locaux" },
-  { rest: 1, name: "Dibi Agneau", desc: "Agneau grille au feu de bois avec oignons", price: 7000, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Grillades" },
-  { rest: 2, name: "Sushi Maki Saumon", desc: "8 pieces de maki saumon frais", price: 6500, img: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=500&q=80", cat: "Asiatique" },
-  { rest: 1, name: "Salade Cesar", desc: "Laitue, poulet grille, croutons, parmesan", price: 4000, img: "https://images.unsplash.com/photo-1550304943-4f24f54ddde9?w=500&q=80", cat: "Salades" },
-  { rest: 2, name: "Thiere (Couscous)", desc: "Couscous senegalais au poulet", price: 4500, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 1, name: "Chawarma Poulet", desc: "Pain libanais, poulet marine, toum", price: 2500, img: "https://images.unsplash.com/photo-1648823153744-8bc5e10e19cd?w=500&q=80", cat: "Chawarma" },
-  { rest: 2, name: "Tiramisu", desc: "Dessert italien au cafe et mascarpone", price: 3000, img: "https://images.unsplash.com/photo-1571115177098-24de81b53e7f?w=500&q=80", cat: "Desserts" },
-  { rest: 1, name: "Yassa Poulet", desc: "Poulet marine au citron et oignons", price: 3500, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 2, name: "Double Cheese", desc: "Double steak boeuf, double cheddar fondant", price: 4500, img: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500&q=80", cat: "Fast Food" },
-  { rest: 1, name: "Smoothie Mangue", desc: "Jus mangue passion ananas", price: 2000, img: "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=500&q=80", cat: "Jus Locaux" },
-  { rest: 2, name: "Pizza 4 Fromages", desc: "Mozzarella, chevre, emmental, gorgonzola", price: 6500, img: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&q=80", cat: "Pizza" },
-  { rest: 1, name: "Ramen Boeuf", desc: "Nouilles japonaises avec bouillon", price: 5000, img: "https://images.unsplash.com/photo-1552611052-33e04de081de?w=500&q=80", cat: "Asiatique" },
-  { rest: 2, name: "Nems Poulet", desc: "4 Nems croustillants faits maison", price: 2500, img: "https://images.unsplash.com/photo-1543826173-1beeb97525d8?w=500&q=80", cat: "Asiatique" },
-  { rest: 1, name: "Fondant Chocolat", desc: "Coeur coulant au chocolat noir", price: 2500, img: "https://images.unsplash.com/photo-1624353365286-3f8d62daad51?w=500&q=80", cat: "Desserts" },
-  { rest: 2, name: "Jus de Bouye", desc: "Jus de pain de singe cremeux", price: 1000, img: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", cat: "Jus Locaux" },
-  { rest: 1, name: "Lakh", desc: "Dessert traditionnel senegalais", price: 1500, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Desserts" },
-  { rest: 2, name: "Brochettes Boeuf", desc: "3 belles brochettes avec frites", price: 4500, img: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&q=80", cat: "Grillades" },
-  { rest: 1, name: "Poulet Braise", desc: "Demi poulet entier grille, aloko", price: 6000, img: "https://images.unsplash.com/photo-1598514982205-f36b96d1e8d4?w=500&q=80", cat: "Grillades" },
-  { rest: 2, name: "Salade Nicoise", desc: "Thon, olives, oeuf dur", price: 3500, img: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&q=80", cat: "Salades" },
-  { rest: 1, name: "Thiof Braise", desc: "Poisson entier braise du port", price: 9000, img: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&q=80", cat: "Grillades" },
-  { rest: 2, name: "Crevettes sautees", desc: "Crevettes sautees a l'ail", price: 7000, img: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=500&q=80", cat: "Asiatique" },
-  { rest: 1, name: "Tacos Viande Hachee", desc: "Tacos francais XL, sauce fromagere", price: 3500, img: "https://images.unsplash.com/photo-1623653387945-2fd25214f8fc?w=500&q=80", cat: "Fast Food" },
-  { rest: 2, name: "Frites Maison", desc: "Portion de frites dorees", price: 1000, img: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=500&q=80", cat: "Fast Food" },
-  { rest: 1, name: "Pizza Reine", desc: "Tomate, jambon, champignons", price: 5500, img: "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=500&q=80", cat: "Pizza" },
-  { rest: 2, name: "Jus de Gingembre", desc: "Gingembre, citron, menthe", price: 1000, img: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", cat: "Jus Locaux" },
-  { rest: 1, name: "Glace Vanille", desc: "Coupe de 2 boules", price: 2000, img: "https://images.unsplash.com/photo-1563805042-7684c8e9e533?w=500&q=80", cat: "Desserts" },
-  { rest: 2, name: "Yassa Poisson", desc: "Poisson marine au citron", price: 3500, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 1, name: "Maffe Boeuf", desc: "Sauce a la pate d'arachide", price: 3000, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 2, name: "Caldou", desc: "Plat du sud leger au poisson avec sauce gombo", price: 3500, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 1, name: "Soupe Kandia", desc: "Sauce gombo a l'huile de palme", price: 3000, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 2, name: "Burger Poulet", desc: "Filet de poulet croustillant", price: 3500, img: "https://images.unsplash.com/photo-1610440042657-612c34d95e9f?w=500&q=80", cat: "Fast Food" },
-  { rest: 1, name: "Wrap Poulet", desc: "Galette de mais, poulet, crudites", price: 3000, img: "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=500&q=80", cat: "Fast Food" },
-  { rest: 2, name: "Pizza Saumon", desc: "Creme fraiche, saumon fume", price: 7000, img: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&q=80", cat: "Pizza" },
-  { rest: 1, name: "Riz Cantonais", desc: "Riz frit avec porc/poulet, petits pois", price: 4000, img: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=500&q=80", cat: "Asiatique" },
-  { rest: 2, name: "Salade Quinoa", desc: "Quinoa, avocat, tomate, poulet", price: 4500, img: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&q=80", cat: "Salades" },
-  { rest: 1, name: "Chawarma Boeuf", desc: "Viande de boeuf marinee a la broche", price: 2500, img: "https://images.unsplash.com/photo-1648823153744-8bc5e10e19cd?w=500&q=80", cat: "Chawarma" },
-  { rest: 2, name: "Crepe au Chocolat", desc: "Crepe fondante", price: 1500, img: "https://images.unsplash.com/photo-1519676867240-f03562e64548?w=500&q=80", cat: "Desserts" },
-  { rest: 1, name: "Dibi Poulet", desc: "Poulet grille coupe au couteau", price: 5000, img: "https://images.unsplash.com/photo-1598514982205-f36b96d1e8d4?w=500&q=80", cat: "Grillades" },
-  { rest: 2, name: "Jus de Ditakh", desc: "Jus du fruit sauvage senegalais", price: 1000, img: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", cat: "Jus Locaux" },
-  { rest: 1, name: "Tiep Bou Dien Blanc", desc: "Riz blanc avec poisson et legumes", price: 3000, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Senegalais" },
-  { rest: 2, name: "Giga Burger", desc: "Burger a 3 etages", price: 6000, img: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500&q=80", cat: "Fast Food" },
-  { rest: 1, name: "Pizza Calzone", desc: "Pizza fermee en chausson", price: 6000, img: "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=500&q=80", cat: "Pizza" },
-  { rest: 2, name: "Poulet DG", desc: "Specialite avec bananes plantains", price: 5000, img: "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=500&q=80", cat: "Senegalais" },
-  { rest: 1, name: "Pad Thai", desc: "Nouilles avec crevettes et cacahuetes", price: 5500, img: "https://images.unsplash.com/photo-1559314809-0d155014e29e?w=500&q=80", cat: "Asiatique" },
-  { rest: 2, name: "Salade Vege", desc: "Assortiment de legumes frais", price: 3000, img: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&q=80", cat: "Salades" },
-  { rest: 1, name: "Beignets Douceurs", desc: "8 petits beignets au sucre", price: 1000, img: "https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", cat: "Desserts" },
-  { rest: 2, name: "Jus de Tamarin", desc: "Daxaar acidule et sucre", price: 1000, img: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", cat: "Jus Locaux" }
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Tiep Bou Dien Rouge', desc: 'Le plat national sénégalais avec du poisson et riz rouge', price: 3000, img: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Sen Burger Dakar', name: 'Pizza Margherita', desc: 'Sauce tomate, mozzarella fraîche, basilic', price: 5000, img: 'https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=500&q=80', cat: 'Pizza' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Jus de Bissap', desc: "Délicieux jus d'hibiscus rafraîchissant", price: 1000, img: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80', cat: 'Jus Locaux' },
+  { restaurant: 'Sen Burger Dakar', name: 'Dibi Agneau', desc: 'Agneau grillé au feu de bois avec oignons', price: 7000, img: 'https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Yassa Poulet', desc: 'Poulet mariné à la moutarde et aux oignons caramélisés', price: 3500, img: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c8?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Thiébou Yapp', desc: 'Riz au bœuf à la sénégalaise avec légumes', price: 3200, img: 'https://images.unsplash.com/photo-1574484284002-952d92456975?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Mafé', desc: "Ragoût de bœuf à la sauce d'arachide", price: 3000, img: 'https://images.unsplash.com/photo-1547592180-85f173990554?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Domoda', desc: 'Plat traditionnel à la courge et pâte d\'arachide', price: 2800, img: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Sen Burger Dakar', name: 'Chawarma Poulet', desc: 'Poulet grillé, légumes, sauce tahini dans une galette', price: 3500, img: 'https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=500&q=80', cat: 'Chawarma' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Pastels au Thon', desc: 'Beignets croustillants farcis au thon et légumes', price: 1500, img: 'https://images.unsplash.com/photo-1600803907087-f56d462fd26b?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Sen Burger Dakar', name: 'Riz Sauté au Poulet', desc: 'Wok de riz sauté aux légumes et poulet tendre', price: 4000, img: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Sen Burger Dakar', name: 'Nems au Porc', desc: 'Rouleaux de printemps frits, sauce nuoc-mam', price: 3500, img: 'https://images.unsplash.com/photo-1564671165093-20688ff1fffa?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Sen Burger Dakar', name: 'Salade César', desc: 'Salade romaine, parmesan, croûtons, sauce César', price: 3200, img: 'https://images.unsplash.com/photo-1550304943-4f24f54ddde9?w=500&q=80', cat: 'Salades' },
+  { restaurant: 'Sen Burger Dakar', name: 'Pizza Royale', desc: 'Jambon, champignons, mozzarella, sauce tomate', price: 6500, img: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=500&q=80', cat: 'Pizza' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Jus de Gingembre', desc: 'Jus de gingembre frais, tonique et revigorant', price: 1200, img: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&q=80', cat: 'Jus Locaux' },
+  { restaurant: 'Sen Burger Dakar', name: 'Brochettes de Bœuf', desc: 'Brochettes marinées aux épices et herbes fraîches', price: 5500, img: 'https://images.unsplash.com/photo-1529042410759-befb1204b468?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Thiakry', desc: 'Couscous de mil au lait caillé et sucre', price: 1500, img: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Sen Burger Dakar', name: 'Double Cheese Burger', desc: 'Double steak, double cheddar, bacon croustillant', price: 5500, img: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Sen Burger Dakar', name: 'Tacos Sénégalais', desc: 'Galette garnie de poulet braisé, frites et sauce blanche', price: 3500, img: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Ndambé', desc: 'Haricots rouges mijotés aux épices sénégalaises', price: 1500, img: 'https://images.unsplash.com/photo-1602253057119-44d745d9b860?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Poulet DG', desc: 'Poulet aux légumes façon camerounaise', price: 5000, img: 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Sen Burger Dakar', name: 'Pizza 4 Fromages', desc: 'Mozzarella, gorgonzola, emmental, chèvre', price: 7000, img: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&q=80', cat: 'Pizza' },
+  { restaurant: 'Sen Burger Dakar', name: 'Salade Avocat Crevettes', desc: 'Salade fraîche, avocat tranché, crevettes roses', price: 4500, img: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&q=80', cat: 'Salades' },
+  { restaurant: 'Sen Burger Dakar', name: 'Sushis Mixtes (8 pcs)', desc: 'Assortiment de sushis salmon, thon, crevette', price: 8000, img: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Jus de Ditakh', desc: 'Jus de ditakhali, subtil et parfumé', price: 1500, img: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=500&q=80', cat: 'Jus Locaux' },
+  { restaurant: 'Sen Burger Dakar', name: 'Chawarma Bœuf', desc: 'Fines tranches de bœuf, houmous, légumes marinés', price: 4000, img: 'https://images.unsplash.com/photo-1561043433-aaf687c4cf04?w=500&q=80', cat: 'Chawarma' },
+  { restaurant: 'Sen Burger Dakar', name: 'Churros au Nutella', desc: 'Churros dorés, sauce Nutella pour tremper', price: 2500, img: 'https://images.unsplash.com/photo-1541592553160-82008b127ccb?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Sen Burger Dakar', name: 'Chicken Wings BBQ', desc: 'Ailes de poulet marinées, sauce BBQ fumée', price: 4500, img: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Poulet Rôti', desc: 'Poulet fermier rôti, herbes aromatiques, pommes de terre', price: 8000, img: 'https://images.unsplash.com/photo-1528575235951-5eb05e3df20c?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Sen Burger Dakar', name: 'Pad Thaï', desc: 'Nouilles de riz sautées, crevettes, cacahuètes, citron', price: 5500, img: 'https://images.unsplash.com/photo-1559314809-0d155014e29e?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Tiep Bou Dien Blanc', desc: 'Riz blanc au poisson et légumes variés', price: 2800, img: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Sen Burger Dakar', name: 'Falafel Wrap', desc: 'Boulettes de pois chiches, salade, tzatziki', price: 3000, img: 'https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=500&q=80', cat: 'Chawarma' },
+  { restaurant: 'Sen Burger Dakar', name: 'Pizza Pepperoni', desc: 'Pepperoni généreux, sauce tomate piquante', price: 6000, img: 'https://images.unsplash.com/photo-1628840042765-356cda07504e?w=500&q=80', cat: 'Pizza' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Jus de Baobab', desc: 'Au fruit du baobab, riche en vitamines C', price: 1500, img: 'https://images.unsplash.com/photo-1622597467836-f3e6707f4b0d?w=500&q=80', cat: 'Jus Locaux' },
+  { restaurant: 'Sen Burger Dakar', name: 'Glace Artisanale 3 Boules', desc: 'Vanille, caramel, chocolat - fabrication locale', price: 2500, img: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Sen Burger Dakar', name: 'Ketchikan (Burger Poisson)', desc: 'Filet de poisson croustillant, sauce tartare', price: 4000, img: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Sen Burger Dakar', name: 'Ramen Poulet', desc: 'Soupe japonaise, nouilles, œuf mollet, nori', price: 5500, img: 'https://images.unsplash.com/photo-1569050467447-ce54b3bbc37d?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Sen Burger Dakar', name: 'Salade Niçoise', desc: 'Thon, haricots verts, œufs, olives, anchois', price: 4000, img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&q=80', cat: 'Salades' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Thiou Boulettes', desc: 'Boulettes de poisson à la sauce tomate sénégalaise', price: 2500, img: 'https://images.unsplash.com/photo-1547592180-85f173990554?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Sen Burger Dakar', name: 'Grillades Mixtes', desc: 'Assortiment de viandes grillées pour 2 personnes', price: 12000, img: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Sen Burger Dakar', name: 'Crêpe Nutella Banane', desc: 'Crêpe fine, Nutella généreux, tranches de banane', price: 2000, img: 'https://images.unsplash.com/photo-1519676867240-f03562e64548?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Jus de Tamarin', desc: 'Jus de tamarin gingembre, acidulé et rafraîchissant', price: 1200, img: 'https://images.unsplash.com/photo-1568909344668-6f14a07b56a0?w=500&q=80', cat: 'Jus Locaux' },
+  { restaurant: 'Sen Burger Dakar', name: 'Chawarma Mixte', desc: 'Poulet et agneau, sauce yaourt et épices orientales', price: 4500, img: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500&q=80', cat: 'Chawarma' },
+  { restaurant: 'Sen Burger Dakar', name: 'Spaghetti Bolognaise', desc: 'Pâtes al dente, sauce bolognaise maison', price: 4000, img: 'https://images.unsplash.com/photo-1551183053-bf91798d792b?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Poulet Basquaise', desc: 'Poulet mijoté aux poivrons et tomates, style basque', price: 5500, img: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c8?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Sen Burger Dakar', name: 'Salade de Fruits Tropicaux', desc: 'Mangue, ananas, papaye, pastèque, jus de citron', price: 2500, img: 'https://images.unsplash.com/photo-1546173159-315724a31696?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Sen Burger Dakar', name: 'Pizza Végétarienne', desc: 'Légumes rôtis, roquette, copeaux de parmesan', price: 5500, img: 'https://images.unsplash.com/photo-1571066811602-716837d681de?w=500&q=80', cat: 'Pizza' },
+  { restaurant: 'Sen Burger Dakar', name: 'Salade Grecque', desc: 'Concombre, feta, olives noires, tomates, origan', price: 3500, img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&q=80', cat: 'Salades' },
+  { restaurant: 'Chef Ousmane (Dark Kitchen)', name: 'Lakh', desc: 'Semoule au lait caillé sucré, dessert traditionnel sénégalais', price: 1500, img: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Sen Burger Dakar', name: 'Le Classique', desc: 'Steak haché pur bœuf, cheddar, salade, tomate', price: 3500, img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Le Lagon 1', name: 'Thiof Braisé', desc: 'Mérou blanc braisé aux épices douces, frites de patate douce', price: 12000, img: 'https://images.unsplash.com/photo-1544979144-411a76d4dfba?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Terrou-Bi', name: 'Filet de Bœuf Rossini', desc: 'Filet mignon, foie gras, sauce aux truffes', price: 25000, img: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'KFC Sea Plaza', name: 'Bucket 10 Pièces', desc: '10 pièces de poulet frit croustillant, frites familiales', price: 15000, img: 'https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Burger King', name: 'Whopper', desc: 'Le légendaire burger au bœuf grillé à la flamme', price: 4500, img: 'https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Chez Loutcha', name: 'Catchupa', desc: 'Ragoût cap-verdien riche au maïs, haricots, viandes', price: 4000, img: 'https://images.unsplash.com/photo-1602253057119-44d745d9b860?w=500&q=80', cat: 'Africain' },
+  { restaurant: 'La Fourchette', name: 'Sushi Boat', desc: 'Assortiment premium de 24 sushis, makis et sashimis', price: 22000, img: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'Radisson Blu', name: 'Brunch Royal', desc: 'Viennoiseries, saumon fumé, œufs bénédictine, jus frais', price: 18000, img: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=500&q=80', cat: 'Brunch' },
+  { restaurant: 'Alkimia', name: 'Ceviche de Daurade', desc: 'Daurade fraîche marinée au citron vert et fruit de la passion', price: 11000, img: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Le Djoloff', name: 'Crevettes à la Plancha', desc: "Grandes crevettes grillées, riz safrané, sauce à l'ail", price: 8000, img: 'https://images.unsplash.com/photo-1559742811-822873691fc8?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Noflaye Beach', name: 'Crêpe Complète', desc: 'Jambon, œuf, fromage, champignons sur galette sarrasin', price: 4500, img: 'https://images.unsplash.com/photo-1519676867240-f03562e64548?w=500&q=80', cat: 'Crêpes' },
+  { restaurant: 'Alkimia', name: 'Carpaccio de Saumon', desc: "Saumon d'Écosse, huile d'olive vierge, citron et câpres", price: 9000, img: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Alkimia', name: 'Langouste Grillée', desc: "Demi-langouste rôtie au beurre d'ail, pommes grenailles", price: 18000, img: 'https://images.unsplash.com/photo-1559742811-822873691fc8?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Alkimia', name: 'Fondant au Chocolat', desc: 'Cœur coulant chocolat noir, glace vanille de Madagascar', price: 5000, img: 'https://images.unsplash.com/photo-1511381939415-e440c9c3e981?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Le Lagon 1', name: 'Plateau de Fruits de Mer', desc: 'Huîtres, crevettes, bulots et langoustines sur glace', price: 22000, img: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Le Lagon 1', name: 'Sole Meunière', desc: 'Sole fraîche au beurre noisette, persil et citron', price: 14000, img: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Radisson Blu', name: 'Club Sandwich Premium', desc: 'Poulet rôti, bacon, œuf, crudités, frites maison', price: 8500, img: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Radisson Blu', name: 'Entrecôte Angus (300g)', desc: "Viande d'exception, sauce béarnaise et pommes sautées", price: 19500, img: 'https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Terrou-Bi', name: 'Magret de Canard au Miel', desc: 'Magret du sud-ouest, sauce miel et purée de patates douces', price: 16000, img: 'https://images.unsplash.com/photo-1514326640560-7d063ef2aed5?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Terrou-Bi', name: 'Tiramisu au Café Touba', desc: 'Le classique italien revisité avec du café sénégalais parfumé', price: 4500, img: 'https://images.unsplash.com/photo-1571115177098-24de63ef3e18?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'KFC Sea Plaza', name: 'Menu Zinger Burger', desc: 'Burger poulet épicé, frites moyennes, boisson', price: 4500, img: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'KFC Sea Plaza', name: 'Tenders (5 pièces)', desc: 'Vrais filets de poulet panés et croustillants', price: 3500, img: 'https://images.unsplash.com/photo-1562967914-01efa7e87832?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Burger King', name: 'Menu Long Chicken', desc: 'Long sandwich au poulet pané, frites, boisson', price: 4200, img: 'https://images.unsplash.com/photo-1610440042657-612c34d95e9f?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Burger King', name: 'Onion Rings', desc: "Rondelles d'oignons frites et croustillantes", price: 1500, img: 'https://images.unsplash.com/photo-1639024471210-20512809187f?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Chez Loutcha', name: 'Thiou aux Crevettes', desc: 'Sauce tomate riche aux grosses crevettes et riz blanc', price: 5500, img: 'https://images.unsplash.com/photo-1547592180-85f173990554?w=500&q=80', cat: 'Senegalais' },
+  { restaurant: 'Chez Loutcha', name: 'Poulet Braisé', desc: 'Poulet entier mariné et grillé, sauce oignon, alloco', price: 7000, img: 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=500&q=80', cat: 'Africain' },
+  { restaurant: 'La Fourchette', name: 'Pad Thaï aux Crevettes', desc: 'Pâtes de riz sautées, tofu, crevettes, cacahuètes', price: 6500, img: 'https://images.unsplash.com/photo-1559314809-0d155014e29e?w=500&q=80', cat: 'Asiatique' },
+  { restaurant: 'La Fourchette', name: 'Ceviche Péruvien', desc: 'Poisson frais mariné au lait de tigre, patate douce', price: 7500, img: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&q=80', cat: 'Gastronomie' },
+  { restaurant: 'Le Djoloff', name: 'Burger Djoloff', desc: "Pain brioché, steak haché maison, confit d'oignons", price: 6000, img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80', cat: 'Fast Food' },
+  { restaurant: 'Le Djoloff', name: 'Brochettes de Lotte', desc: 'Lotte marinée aux épices douces, grillée au feu de bois', price: 8500, img: 'https://images.unsplash.com/photo-1529042410759-befb1204b468?w=500&q=80', cat: 'Grillades' },
+  { restaurant: 'Noflaye Beach', name: 'Gaufre au Nutella', desc: 'Gaufre tiède croustillante nappée de chocolat noisette', price: 2500, img: 'https://images.unsplash.com/photo-1562376552-0d160a2f9fc6?w=500&q=80', cat: 'Desserts' },
+  { restaurant: 'Noflaye Beach', name: 'Smoothie Mangue-Passion', desc: "Fruits frais mixés, rafraîchissant pour l'été", price: 2000, img: 'https://images.unsplash.com/photo-1622597467836-f3e6707f4b0d?w=500&q=80', cat: 'Jus Locaux' },
 ];
 
 const users = [
-  { role: 'restaurant', name: 'Chef Ousmane (Dark Kitchen)', phone: '+221771234567', password: 'pass123', address: 'Plateau, Dakar', lat: 14.6937, lng: -17.4441 },
-  { role: 'restaurant', name: 'Sen Burger Dakar', phone: '+221771234568', password: 'pass123', address: 'Mermoz, Dakar', lat: 14.6928, lng: -17.4660 },
+  { role: 'restaurant', name: 'Chef Ousmane (Dark Kitchen)', phone: '+221771234567', password: 'pass123', address: 'Plateau, Dakar', lat: 14.71, lng: -17.46 },
+  { role: 'restaurant', name: 'Sen Burger Dakar', phone: '+221771234568', password: 'pass123', address: 'Mermoz, Dakar', lat: 14.692, lng: -17.465 },
+  { role: 'restaurant', name: 'Le Lagon 1', phone: '+221771234569', password: 'pass123', address: 'Plateau, Dakar', lat: 14.667, lng: -17.433 },
+  { role: 'restaurant', name: 'Terrou-Bi', phone: '+221771234570', password: 'pass123', address: 'Corniche Ouest, Dakar', lat: 14.685, lng: -17.465 },
+  { role: 'restaurant', name: 'KFC Sea Plaza', phone: '+221771234571', password: 'pass123', address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
+  { role: 'restaurant', name: 'Burger King', phone: '+221771234572', password: 'pass123', address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
+  { role: 'restaurant', name: 'Chez Loutcha', phone: '+221771234573', password: 'pass123', address: 'Plateau, Dakar', lat: 14.668, lng: -17.435 },
+  { role: 'restaurant', name: 'La Fourchette', phone: '+221771234574', password: 'pass123', address: 'Plateau, Dakar', lat: 14.666, lng: -17.432 },
+  { role: 'restaurant', name: 'Radisson Blu', phone: '+221771234575', password: 'pass123', address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
+  { role: 'restaurant', name: 'Alkimia', phone: '+221771234576', password: 'pass123', address: 'Almadies, Dakar', lat: 14.743, lng: -17.513 },
+  { role: 'restaurant', name: 'Le Djoloff', phone: '+221771234577', password: 'pass123', address: 'Fann Hock, Dakar', lat: 14.685, lng: -17.471 },
+  { role: 'restaurant', name: 'Noflaye Beach', phone: '+221771234578', password: 'pass123', address: 'Almadies, Dakar', lat: 14.75, lng: -17.52 },
   { role: 'livreur', name: 'Modou Ndiaye', phone: '+221773322111', password: 'pass123', address: 'Dakar', lat: 14.7167, lng: -17.4677 },
   { role: 'client', name: 'Oumy D.', phone: '+221779988776', password: 'pass123', address: 'Almadies, Dakar', lat: 14.7445, lng: -17.5134 },
   { role: 'admin', name: 'Admin SenFood', phone: '+221770000001', password: 'admin123', address: 'Dakar, Senegal', lat: 14.6937, lng: -17.4441 },
@@ -106,20 +150,22 @@ async function seed() {
     }
     
     // Inserer les plats en utilisant les bons IDs de resto
-    console.log('\n🍽️  Insertion de 50 plats...');
+    console.log(`\n🍽️  Insertion de ${plats.length} plats...`);
     for (const p of plats) {
-      // Determiner le nom du resto (1: Ousmane, 2: Sen Burger)
-      const restName = p.rest === 1 ? 'Chef Ousmane (Dark Kitchen)' : 'Sen Burger Dakar';
-      const actualRestId = restaurantIds[restName];
-      
+      const actualRestId = restaurantIds[p.restaurant];
+      if (!actualRestId) {
+        console.warn(`   ⚠️  Restaurant inconnu pour le plat "${p.name}": ${p.restaurant}`);
+        continue;
+      }
+
       const prepTime = Math.floor(Math.random() * 20) + 10;
       await pool.query(
-        `INSERT INTO menu_items (restaurant_id, name, description, price, image_url, category, is_available, prep_time_minutes) 
+        `INSERT INTO menu_items (restaurant_id, name, description, price, image_url, category, is_available, prep_time_minutes)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [actualRestId, p.name, p.desc, p.price, p.img, p.cat, true, prepTime]
       );
     }
-    console.log('   ✅ 50 plats inseres avec succès');
+    console.log(`   ✅ ${plats.length} plats inseres avec succès`);
 
     // Horaires
     console.log('\n🕐 Horaires...');
@@ -172,16 +218,11 @@ async function seed() {
     console.log('\n=====================================');
     console.log('🎉 Seed termine avec succes !');
     console.log('=====================================\n');
-    console.log('📌 IDENTIFIANTS DE CONNEXION :');
-    console.log('┌────────────┬──────────────────────────────┬─────────────────┬────────────┐');
-    console.log('│ Role       │ Nom                          │ Telephone       │ Mot de passe│');
-    console.log('├────────────┼──────────────────────────────┼─────────────────┼────────────┤');
-    console.log('│ restaurant │ Chef Ousmane (Dark Kitchen)   │ +221771234567   │ pass123    │');
-    console.log('│ restaurant │ Sen Burger Dakar              │ +221771234568   │ pass123    │');
-    console.log('│ livreur    │ Modou Ndiaye                  │ +221773322111   │ pass123    │');
-    console.log('│ client     │ Oumy D.                       │ +221779988776   │ pass123    │');
-    console.log('│ admin      │ Admin SenFood                 │ +221770000001   │ admin123   │');
-    console.log('└────────────┴──────────────────────────────┴─────────────────┴────────────┘');
+    console.log('📌 COMPTES CREES :');
+    for (const u of users) {
+      console.log(`   ${u.role.padEnd(10)} | ${u.name.padEnd(30)} | ${u.phone}`);
+    }
+    console.log('   (mots de passe definis via les variables d\'environnement SEED_* — voir .env.example)');
     console.log('\n📌 CODES PROMO : BIENVENUE (-15%) | SENFOOD500 (-500 FCFA)\n');
 
   } catch (err) {
