@@ -13,9 +13,6 @@ let pool;
 let initDatabase;
 
 if (USE_POSTGRES) {
-  // Désactive la vérification stricte du certificat SSL pour Supabase/Vercel
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  
   // ===== MODE POSTGRESQL (Production/Supabase/Vercel) =====
   const { Pool } = require('pg');
   

@@ -1,0 +1,48 @@
+module.exports = {
+  expo: {
+    name: "NOOR EAT Livreur",
+    slug: "app-livreur",
+    version: "1.0.0",
+    orientation: "portrait",
+    icon: "./assets/icon.png",
+    userInterfaceStyle: "light",
+    splash: {
+      image: "./assets/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff",
+    },
+    ios: {
+      supportsTablet: true,
+    },
+    android: {
+      adaptiveIcon: {
+        backgroundColor: "#E6F4FE",
+        foregroundImage: "./assets/android-icon-foreground.png",
+      },
+      package: "com.mamadouelimane.applivreur",
+      permissions: [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+      ],
+      config: {
+        googleMaps: {
+          apiKey: process.env.GOOGLE_MAPS_API_KEY,
+        },
+      },
+    },
+    web: {
+      favicon: "./assets/favicon.png",
+      baseUrl: "/livreur/",
+    },
+    extra: {
+      eas: { projectId: "78862722-d3f2-4d56-85fa-fd481b5521f0" },
+      LOCATIONIQ_API_KEY: process.env.LOCATIONIQ_API_KEY,
+      GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+    },
+    plugins: [
+      ["expo-location", { locationAlwaysPermission: "Autoriser le suivi en arrière-plan." }],
+    ],
+  },
+};

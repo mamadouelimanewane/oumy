@@ -1,7 +1,13 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret_change_in_production';
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not set — required to sign/verify auth tokens');
+  }
+  return secret;
+}
 
 // Générer un token JWT
 const generateToken = (user) => {
@@ -11,7 +17,7 @@ const generateToken = (user) => {
       role: user.role, 
       phone: user.phone 
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 };
@@ -26,7 +32,7 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
 
     // Vérifier si l'utilisateur existe toujours
     const result = await pool.query(
@@ -83,7 +89,7 @@ const optionalAuth = async (req, res, next) => {
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
 
     const result = await pool.query(
       'SELECT id, role, name, phone FROM users WHERE id = $1 AND is_active = true',

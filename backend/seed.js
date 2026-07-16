@@ -6,6 +6,21 @@
 const bcrypt = require('bcrypt');
 const { pool, initDatabase } = require('./config/database');
 
+function requireSeedPassword(envVar) {
+  const val = process.env[envVar];
+  if (!val) {
+    throw new Error(`${envVar} n'est pas defini — requis pour seeder les comptes de demo avec un vrai mot de passe (voir .env.example)`);
+  }
+  return val;
+}
+
+const SEED_PASSWORDS = {
+  restaurant: requireSeedPassword('SEED_RESTAURANT_PASSWORD'),
+  livreur: requireSeedPassword('SEED_LIVREUR_PASSWORD'),
+  client: requireSeedPassword('SEED_CLIENT_PASSWORD'),
+  admin: requireSeedPassword('SEED_ADMIN_PASSWORD'),
+};
+
 // Catalogue complet (12 restaurants Dakar, 81 plats) — porte depuis le catalogue
 // client-pwa developpe sur la racine du repo (commits du 11-12/07) qui n'existait
 // jusqu'ici que comme fallback statique cote client, jamais comme vraies donnees DB.
@@ -94,21 +109,21 @@ const plats = [
 ];
 
 const users = [
-  { role: 'restaurant', name: 'Chef Ousmane (Dark Kitchen)', phone: '+221771234567', password: 'pass123', address: 'Plateau, Dakar', lat: 14.71, lng: -17.46 },
-  { role: 'restaurant', name: 'Sen Burger Dakar', phone: '+221771234568', password: 'pass123', address: 'Mermoz, Dakar', lat: 14.692, lng: -17.465 },
-  { role: 'restaurant', name: 'Le Lagon 1', phone: '+221771234569', password: 'pass123', address: 'Plateau, Dakar', lat: 14.667, lng: -17.433 },
-  { role: 'restaurant', name: 'Terrou-Bi', phone: '+221771234570', password: 'pass123', address: 'Corniche Ouest, Dakar', lat: 14.685, lng: -17.465 },
-  { role: 'restaurant', name: 'KFC Sea Plaza', phone: '+221771234571', password: 'pass123', address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
-  { role: 'restaurant', name: 'Burger King', phone: '+221771234572', password: 'pass123', address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
-  { role: 'restaurant', name: 'Chez Loutcha', phone: '+221771234573', password: 'pass123', address: 'Plateau, Dakar', lat: 14.668, lng: -17.435 },
-  { role: 'restaurant', name: 'La Fourchette', phone: '+221771234574', password: 'pass123', address: 'Plateau, Dakar', lat: 14.666, lng: -17.432 },
-  { role: 'restaurant', name: 'Radisson Blu', phone: '+221771234575', password: 'pass123', address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
-  { role: 'restaurant', name: 'Alkimia', phone: '+221771234576', password: 'pass123', address: 'Almadies, Dakar', lat: 14.743, lng: -17.513 },
-  { role: 'restaurant', name: 'Le Djoloff', phone: '+221771234577', password: 'pass123', address: 'Fann Hock, Dakar', lat: 14.685, lng: -17.471 },
-  { role: 'restaurant', name: 'Noflaye Beach', phone: '+221771234578', password: 'pass123', address: 'Almadies, Dakar', lat: 14.75, lng: -17.52 },
-  { role: 'livreur', name: 'Modou Ndiaye', phone: '+221773322111', password: 'pass123', address: 'Dakar', lat: 14.7167, lng: -17.4677 },
-  { role: 'client', name: 'Oumy D.', phone: '+221779988776', password: 'pass123', address: 'Almadies, Dakar', lat: 14.7445, lng: -17.5134 },
-  { role: 'admin', name: 'Admin SenFood', phone: '+221770000001', password: 'admin123', address: 'Dakar, Senegal', lat: 14.6937, lng: -17.4441 },
+  { role: 'restaurant', name: 'Chef Ousmane (Dark Kitchen)', phone: '+221771234567', password: SEED_PASSWORDS.restaurant, address: 'Plateau, Dakar', lat: 14.71, lng: -17.46 },
+  { role: 'restaurant', name: 'Sen Burger Dakar', phone: '+221771234568', password: SEED_PASSWORDS.restaurant, address: 'Mermoz, Dakar', lat: 14.692, lng: -17.465 },
+  { role: 'restaurant', name: 'Le Lagon 1', phone: '+221771234569', password: SEED_PASSWORDS.restaurant, address: 'Plateau, Dakar', lat: 14.667, lng: -17.433 },
+  { role: 'restaurant', name: 'Terrou-Bi', phone: '+221771234570', password: SEED_PASSWORDS.restaurant, address: 'Corniche Ouest, Dakar', lat: 14.685, lng: -17.465 },
+  { role: 'restaurant', name: 'KFC Sea Plaza', phone: '+221771234571', password: SEED_PASSWORDS.restaurant, address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
+  { role: 'restaurant', name: 'Burger King', phone: '+221771234572', password: SEED_PASSWORDS.restaurant, address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
+  { role: 'restaurant', name: 'Chez Loutcha', phone: '+221771234573', password: SEED_PASSWORDS.restaurant, address: 'Plateau, Dakar', lat: 14.668, lng: -17.435 },
+  { role: 'restaurant', name: 'La Fourchette', phone: '+221771234574', password: SEED_PASSWORDS.restaurant, address: 'Plateau, Dakar', lat: 14.666, lng: -17.432 },
+  { role: 'restaurant', name: 'Radisson Blu', phone: '+221771234575', password: SEED_PASSWORDS.restaurant, address: 'Sea Plaza, Dakar', lat: 14.693, lng: -17.473 },
+  { role: 'restaurant', name: 'Alkimia', phone: '+221771234576', password: SEED_PASSWORDS.restaurant, address: 'Almadies, Dakar', lat: 14.743, lng: -17.513 },
+  { role: 'restaurant', name: 'Le Djoloff', phone: '+221771234577', password: SEED_PASSWORDS.restaurant, address: 'Fann Hock, Dakar', lat: 14.685, lng: -17.471 },
+  { role: 'restaurant', name: 'Noflaye Beach', phone: '+221771234578', password: SEED_PASSWORDS.restaurant, address: 'Almadies, Dakar', lat: 14.75, lng: -17.52 },
+  { role: 'livreur', name: 'Modou Ndiaye', phone: '+221773322111', password: SEED_PASSWORDS.livreur, address: 'Dakar', lat: 14.7167, lng: -17.4677 },
+  { role: 'client', name: 'Oumy D.', phone: '+221779988776', password: SEED_PASSWORDS.client, address: 'Almadies, Dakar', lat: 14.7445, lng: -17.5134 },
+  { role: 'admin', name: 'Admin SenFood', phone: '+221770000001', password: SEED_PASSWORDS.admin, address: 'Dakar, Senegal', lat: 14.6937, lng: -17.4441 },
 ];
 
 async function seed() {

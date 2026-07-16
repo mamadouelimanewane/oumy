@@ -196,7 +196,7 @@ io.use(async (socket, next) => {
     }
 
     const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret_change_in_production');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     const result = await pool.query(
       'SELECT id, role, name FROM users WHERE id = $1 AND is_active = true',

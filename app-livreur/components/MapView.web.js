@@ -3,8 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
-// On utilise la clé fournie
-const GOOGLE_MAPS_KEY = "AIzaSyBDVyKoHTYVigoZhlwfk3ZRmhRTGPpGEdw";
+const GOOGLE_MAPS_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY;
 
 const MapView = ({ children, style, initialRegion }) => {
   const mapRef = useRef(null);

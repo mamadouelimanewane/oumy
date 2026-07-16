@@ -19,13 +19,33 @@ router.post('/request', authorize('restaurant', 'livreur'), [
     const { amount, method } = req.body;
     const userId = req.user.id;
 
-    // Calculer le solde disponible (commandes livrées - retraits déjà faits)
-    // Pour cet exemple, on simplifie : on vérifie juste si l'utilisateur existe
-    
     // Vérifier s'il n'y a pas déjà une demande en attente
     const pending = await pool.query('SELECT id FROM payouts WHERE user_id = $1 AND status = \'en_attente\'', [userId]);
     if (pending.rows.length > 0) {
       return res.status(400).json({ error: 'Vous avez déjà une demande de retrait en attente' });
+    }
+
+    // Calculer le solde disponible (gains des commandes livrées - retraits deja
+    // payes ou en attente), pour empecher une demande de retrait superieure aux
+    // gains reels de l'utilisateur.
+    const earningsQuery = req.user.role === 'livreur'
+      ? `SELECT COALESCE(SUM(delivery_fee), 0) AS total FROM orders WHERE courier_id = $1 AND status = 'livree'`
+      : `SELECT COALESCE(SUM(total_amount - COALESCE(delivery_fee, 0)), 0) AS total FROM orders WHERE restaurant_id = $1 AND status = 'livree'`;
+    const earningsResult = await pool.query(earningsQuery, [userId]);
+    const totalEarnings = parseFloat(earningsResult.rows[0].total);
+
+    const alreadyWithdrawnResult = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM payouts WHERE user_id = $1 AND status IN ('en_attente', 'paye')`,
+      [userId]
+    );
+    const alreadyWithdrawn = parseFloat(alreadyWithdrawnResult.rows[0].total);
+
+    const available = totalEarnings - alreadyWithdrawn;
+    if (parseFloat(amount) > available) {
+      return res.status(400).json({
+        error: `Solde disponible insuffisant (${available} FCFA disponible pour ${amount} FCFA demandes)`,
+        available,
+      });
     }
 
     const result = await pool.query(
