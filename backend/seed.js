@@ -1,5 +1,5 @@
 /**
- * 🌱 SenFood Seed - Compatible PostgreSQL et SQLite
+ * 🌱 NOOR EAT Seed - Compatible PostgreSQL et SQLite
  * Usage: node seed.js
  */
 
@@ -123,11 +123,11 @@ const users = [
   { role: 'restaurant', name: 'Noflaye Beach', phone: '+221771234578', password: SEED_PASSWORDS.restaurant, address: 'Almadies, Dakar', lat: 14.75, lng: -17.52 },
   { role: 'livreur', name: 'Modou Ndiaye', phone: '+221773322111', password: SEED_PASSWORDS.livreur, address: 'Dakar', lat: 14.7167, lng: -17.4677 },
   { role: 'client', name: 'Oumy D.', phone: '+221779988776', password: SEED_PASSWORDS.client, address: 'Almadies, Dakar', lat: 14.7445, lng: -17.5134 },
-  { role: 'admin', name: 'Admin SenFood', phone: '+221770000001', password: SEED_PASSWORDS.admin, address: 'Dakar, Senegal', lat: 14.6937, lng: -17.4441 },
+  { role: 'admin', name: 'Admin NOOR EAT', phone: '+221770000001', password: SEED_PASSWORDS.admin, address: 'Dakar, Senegal', lat: 14.6937, lng: -17.4441 },
 ];
 
 async function seed() {
-  console.log('🌱 SenFood Seed');
+  console.log('🌱 NOOR EAT Seed');
   console.log('=====================================\n');
 
   try {
@@ -226,9 +226,9 @@ async function seed() {
     );
     await pool.query(
       `INSERT INTO promotions (code, description, discount_type, discount_value, min_order_amount, max_uses, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      ['SENFOOD500', '500 FCFA de reduction', 'fixed', 500, 3000, 50, true]
+      ['NOOREAT500', '500 FCFA de reduction', 'fixed', 500, 3000, 50, true]
     );
-    console.log('   ✅ BIENVENUE (-15%) et SENFOOD500 (-500 FCFA)');
+    console.log('   ✅ BIENVENUE (-15%) et NOOREAT500 (-500 FCFA)');
 
     console.log('\n=====================================');
     console.log('🎉 Seed termine avec succes !');
@@ -238,7 +238,7 @@ async function seed() {
       console.log(`   ${u.role.padEnd(10)} | ${u.name.padEnd(30)} | ${u.phone}`);
     }
     console.log('   (mots de passe definis via les variables d\'environnement SEED_* — voir .env.example)');
-    console.log('\n📌 CODES PROMO : BIENVENUE (-15%) | SENFOOD500 (-500 FCFA)\n');
+    console.log('\n📌 CODES PROMO : BIENVENUE (-15%) | NOOREAT500 (-500 FCFA)\n');
 
   } catch (err) {
     console.error('\n❌ Erreur seed:', err.message);

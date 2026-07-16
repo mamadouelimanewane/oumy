@@ -1,5 +1,5 @@
 {
-  "name": "senfood-monorepo",
+  "name": "nooreat-monorepo",
   "private": true,
   "scripts": {
     "build": "mkdir -p public && cd client-pwa && npm install && npm run build && cp -r dist/* ../public/ && cd ../dashboard-restaurant && npm install && npm run build && mkdir -p ../public/restaurant && cp -r dist/* ../public/restaurant/ && cd ../panel-admin && npm install && npm run build && mkdir -p ../public/admin && cp -r dist/* ../public/admin/ && cd ../app-livreur && npm install && npx expo export --platform web && mkdir -p ../public/livreur && cp -r dist/* ../public/livreur/",

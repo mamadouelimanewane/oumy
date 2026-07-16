@@ -13,7 +13,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState(null); // loading | success | error | added
   const [panier, setPanier] = useState(() => {
-    try { const saved = localStorage.getItem('senfood_panier'); return saved ? JSON.parse(saved) : []; }
+    try { const saved = localStorage.getItem('nooreat_panier'); return saved ? JSON.parse(saved) : []; }
     catch { return []; }
   });
   const [promoCode, setPromoCode] = useState('');
@@ -32,14 +32,14 @@ function App() {
   const [deliveryAddressCustom, setDeliveryAddressCustom] = useState(''); // custom delivery address text
 
   // DARK MODE
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('senfood_dark') === 'true');
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('nooreat_dark') === 'true');
 
   // LANGUAGE
-  const [lang, setLang] = useState(() => localStorage.getItem('senfood_lang') || 'fr');
+  const [lang, setLang] = useState(() => localStorage.getItem('nooreat_lang') || 'fr');
 
   // SAVED ADDRESSES
   const [savedAddresses, setSavedAddresses] = useState(() => {
-    try { const s = localStorage.getItem('senfood_addresses'); return s ? JSON.parse(s) : [
+    try { const s = localStorage.getItem('nooreat_addresses'); return s ? JSON.parse(s) : [
       { id: 1, label: 'Maison', icon: '🏠', address: 'Sacré-Cœur 3, Dakar', lat: 14.7167, lng: -17.4677 },
       { id: 2, label: 'Bureau', icon: '💼', address: 'Plateau, Rue Carnot', lat: 14.6697, lng: -17.4381 },
     ]; } catch { return []; }
@@ -48,7 +48,7 @@ function App() {
   const [newAddressLabel, setNewAddressLabel] = useState('');
 
   // REFERRAL
-  const referralCode = user ? `SENFOOD${user.phone?.slice(-4) || 'X'}` : 'SENFOODX';
+  const referralCode = user ? `NOOREAT${user.phone?.slice(-4) || 'X'}` : 'NOOREATX';
   const [referralCopied, setReferralCopied] = useState(false);
 
   // MINI-GAMES
@@ -58,7 +58,7 @@ function App() {
   const [scratchRevealed, setScratchRevealed] = useState(false);
   const [scratchPrize, setScratchPrize] = useState(null);
   const [prizeHistory, setPrizeHistory] = useState(() => {
-    try { const s = localStorage.getItem('senfood_prizes'); return s ? JSON.parse(s) : []; } catch { return []; }
+    try { const s = localStorage.getItem('nooreat_prizes'); return s ? JSON.parse(s) : []; } catch { return []; }
   });
 
   // CHAT LIVE
@@ -75,7 +75,7 @@ function App() {
 
   // NOTIFICATIONS
   const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Bienvenue sur SenFood !', body: 'Profitez de -20% sur votre première commande', time: 'Maintenant', read: false, icon: '🎉' },
+    { id: 1, title: 'Bienvenue sur NOOR EAT !', body: 'Profitez de -20% sur votre première commande', time: 'Maintenant', read: false, icon: '🎉' },
     { id: 2, title: 'Nouveau restaurant', body: 'Chef Ousmane a ajouté 5 nouveaux plats', time: 'Il y a 2h', read: false, icon: '🍽️' },
     { id: 3, title: 'Livraison gratuite', body: 'Ce week-end, livraison offerte dès 5000 FCFA', time: 'Hier', read: true, icon: '🚚' },
   ]);
@@ -160,22 +160,22 @@ function App() {
   // DARK MODE EFFECT
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('senfood_dark', darkMode);
+    localStorage.setItem('nooreat_dark', darkMode);
   }, [darkMode]);
 
   // LANGUAGE PERSISTENCE
   useEffect(() => {
-    localStorage.setItem('senfood_lang', lang);
+    localStorage.setItem('nooreat_lang', lang);
   }, [lang]);
 
   // SAVED ADDRESSES PERSISTENCE
   useEffect(() => {
-    localStorage.setItem('senfood_addresses', JSON.stringify(savedAddresses));
+    localStorage.setItem('nooreat_addresses', JSON.stringify(savedAddresses));
   }, [savedAddresses]);
 
   // PRIZE HISTORY PERSISTENCE
   useEffect(() => {
-    localStorage.setItem('senfood_prizes', JSON.stringify(prizeHistory));
+    localStorage.setItem('nooreat_prizes', JSON.stringify(prizeHistory));
   }, [prizeHistory]);
 
   // CHAT LIVE SEND
@@ -1774,7 +1774,7 @@ function App() {
             {/* Push permission */}
             {'Notification' in window && Notification.permission !== 'granted' && (
               <button
-                onClick={() => Notification.requestPermission().then(p => { if (p === 'granted') { new Notification('SenFood', { body: 'Notifications activées ! 🎉' }); } })}
+                onClick={() => Notification.requestPermission().then(p => { if (p === 'granted') { new Notification('NOOR EAT', { body: 'Notifications activées ! 🎉' }); } })}
                 className="w-full mb-6 py-4 bg-gradient-to-r from-primary to-orange-600 text-white font-bold rounded-2xl text-sm shadow-lg shadow-primary/30 hover:shadow-xl transition-all"
               >
                 {lang === 'fr' ? '🔔 Activer les notifications push' : '🔔 Dëggal notifications push'}

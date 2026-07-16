@@ -1,6 +1,6 @@
 {
   "appId": "com.senfood.admin",
-  "appName": "SenFood Admin",
+  "appName": "NOOR EAT Admin",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

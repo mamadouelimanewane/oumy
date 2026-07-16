@@ -1,12 +1,12 @@
-# 🇸🇳 SenFood - Plateforme de Livraison de Repas (Sénégal)
+# 🇸🇳 NOOR EAT - Plateforme de Livraison de Repas (Sénégal)
 
-[![Build Status](https://github.com/mamadouelimanewane/oumy/workflows/Build%20SenFood%20Apps/badge.svg)](https://github.com/mamadouelimanewane/oumy/actions)
+[![Build Status](https://github.com/mamadouelimanewane/oumy/workflows/Build%20NOOR%20EAT%20Apps/badge.svg)](https://github.com/mamadouelimanewane/oumy/actions)
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/mamadouelimanewane/oumy/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## 🚀 Présentation
 
-SenFood est une plateforme complète de livraison de repas style UberEats, dédiée au marché Sénégalais. Elle connecte **clients**, **restaurants** et **livreurs** en temps réel.
+NOOR EAT est une plateforme complète de livraison de repas style UberEats, dédiée au marché Sénégalais. Elle connecte **clients**, **restaurants** et **livreurs** en temps réel.
 
 ### ✨ Fonctionnalités Clés
 
@@ -21,10 +21,10 @@ SenFood est une plateforme complète de livraison de repas style UberEats, dédi
 
 | Application | Technologie | Description |
 |-------------|-------------|-------------|
-| **SenFood Client** | React PWA + Capacitor | Application client pour commander |
-| **SenFood Restaurant** | React + Capacitor | Dashboard pour restaurants |
-| **SenFood Livreur** | React Native + Expo | App mobile pour livreurs |
-| **SenFood Admin** | React + Capacitor | Panel d'administration |
+| **NOOR EAT Client** | React PWA + Capacitor | Application client pour commander |
+| **NOOR EAT Restaurant** | React + Capacitor | Dashboard pour restaurants |
+| **NOOR EAT Livreur** | React Native + Expo | App mobile pour livreurs |
+| **NOOR EAT Admin** | React + Capacitor | Panel d'administration |
 
 ## 🛠️ Stack Technique
 
@@ -148,7 +148,7 @@ npm test
 ## 📁 Structure du Projet
 
 ```
-SenFood/
+noor-eat/
 ├── backend/              # API Node.js + Express
 │   ├── config/          # Configuration DB
 │   ├── middleware/      # Auth JWT

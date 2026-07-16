@@ -1,5 +1,5 @@
-// SenFood Service Worker - Offline Mode
-const CACHE_NAME = 'senfood-v2';
+// NOOR EAT Service Worker - Offline Mode
+const CACHE_NAME = 'nooreat-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -64,7 +64,7 @@ self.addEventListener('fetch', (event) => {
 
 // Push notifications
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : { title: 'SenFood', body: 'Nouvelle notification' };
+  const data = event.data ? event.data.json() : { title: 'NOOR EAT', body: 'Nouvelle notification' };
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,

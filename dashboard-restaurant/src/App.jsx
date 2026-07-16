@@ -164,7 +164,7 @@ function LoginPage({ onLogin }) {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4">
             <Utensils className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">SenFood <span className="text-indigo-400">Resto</span></h1>
+          <h1 className="text-3xl font-bold text-white">NOOR EAT <span className="text-indigo-400">Resto</span></h1>
           <p className="text-slate-400 mt-2">Connectez-vous à votre dashboard</p>
         </div>
 
@@ -565,7 +565,7 @@ function App() {
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-secondary text-white flex flex-col transform transition-transform duration-300 ease-in-out ${showMobileMenu ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
         <div className="h-16 flex items-center px-6 border-b border-white/10 relative">
           <Utensils className="w-6 h-6 text-indigo-400 mr-2" />
-          <span className="text-xl font-bold tracking-tight">SenFood <span className="text-indigo-400">Resto</span></span>
+          <span className="text-xl font-bold tracking-tight">NOOR EAT <span className="text-indigo-400">Resto</span></span>
           <button className="md:hidden ml-auto p-2 text-white/60" onClick={() => setShowMobileMenu(false)}>
             <X className="w-6 h-6" />
           </button>
@@ -1216,7 +1216,7 @@ function App() {
                <HoraireManager />
                <div className="mt-12 bg-indigo-900 rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl">
                  <div className="relative z-10">
-                   <h3 className="text-xl font-bold mb-2">💡 Conseil SenFood</h3>
+                   <h3 className="text-xl font-bold mb-2">💡 Conseil NOOR EAT</h3>
                    <p className="text-indigo-200 text-sm max-w-lg leading-relaxed">
                      Gardez vos horaires à jour pour éviter les commandes hors service. Un restaurant ponctuel est favorisé par notre algorithme de recommandation.
                    </p>

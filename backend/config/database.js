@@ -1,5 +1,5 @@
 /**
- * 🗄️ SenFood Database Adapter
+ * 🗄️ NOOR EAT Database Adapter
  * Auto-detecte PostgreSQL (DB_HOST set) ou bascule sur SQLite (better-sqlite3)
  * Interface unifiee: pool.query(sql, params) - $1,$2 auto-converti pour SQLite
  */
@@ -32,7 +32,7 @@ if (USE_POSTGRES) {
     pool = new Pool({
       host: process.env.DB_HOST || 'localhost',
       port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'senfood',
+      database: process.env.DB_NAME || 'nooreat',
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || '',
       max: 20, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000,
@@ -59,7 +59,7 @@ if (USE_POSTGRES) {
   // ===== MODE SQLITE (better-sqlite3 - synchrone, fiable) =====
   const Database = require('better-sqlite3');
   const path = require('path');
-  const dbPath = path.resolve(__dirname, '..', 'senfood.db');
+  const dbPath = path.resolve(__dirname, '..', 'nooreat.db');
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

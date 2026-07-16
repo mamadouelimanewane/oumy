@@ -188,7 +188,7 @@ function LoginPage({ onLogin }) {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-4 shadow-lg shadow-indigo-500/30">
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-black text-white">SenFood</h1>
+          <h1 className="text-3xl font-black text-white">NOOR EAT</h1>
           <p className="text-indigo-400 text-sm font-bold uppercase tracking-widest mt-1">Admin Global</p>
         </div>
 
@@ -479,7 +479,7 @@ function App() {
             <ShieldCheck className="text-white w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-white tracking-tight">SenFood</h1>
+            <h1 className="text-xl font-black text-white tracking-tight">NOOR EAT</h1>
             <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">Admin Global</p>
           </div>
           <button className="md:hidden ml-auto p-2 text-slate-400" onClick={() => setShowMobileMenu(false)}>
@@ -1265,7 +1265,7 @@ function App() {
               <h3 className="text-xl font-black text-white mb-6">Nouveau Code Promo</h3>
               <form onSubmit={handleCreatePromo} className="space-y-4">
                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">CODE (Ex: SENFOOD10)</label>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">CODE (Ex: NOOREAT10)</label>
                     <input type="text" value={promoForm.code} onChange={e => setPromoForm({...promoForm, code: e.target.value})} required className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                  </div>
                  <div className="grid grid-cols-2 gap-4">

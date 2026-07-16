@@ -1,5 +1,5 @@
 /**
- * 🇸🇳 SenFood Backend API - Production Ready
+ * 🇸🇳 NOOR EAT Backend API - Production Ready
  * PostgreSQL + JWT + Socket.IO + Full Features
  */
 
@@ -101,7 +101,7 @@ app.use((req, res, next) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
-    status: 'SenFood API is running', 
+    status: 'NOOR EAT API is running', 
     version: '2.0.0 (PostgreSQL + JWT + Socket.IO)',
     timestamp: new Date().toISOString()
   });
@@ -374,7 +374,7 @@ const startServer = async () => {
     if (!process.env.VERCEL) {
       await initDatabase();
       server.listen(PORT, () => {
-        console.log(`🚀 API SenFood lancée sur http://localhost:${PORT}`);
+        console.log(`🚀 API NOOR EAT lancée sur http://localhost:${PORT}`);
         console.log(`📡 Socket.IO actif pour temps réel`);
         console.log(`🔐 JWT Authentication activée`);
         console.log(`🐘 PostgreSQL connecté`);

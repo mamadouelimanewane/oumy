@@ -1,4 +1,4 @@
-# 🇸🇳 SenFood - Rapport Technique Complet
+# 🇸🇳 NOOR EAT - Rapport Technique Complet
 
 **Date:** 21 Mars 2026  
 **Version:** 2.0.0  
@@ -8,7 +8,7 @@
 
 ## 1. Résumé Exécutif
 
-SenFood est une plateforme de livraison de repas complète, déployée et prête pour la production. Cette version 2.0 inclut :
+NOOR EAT est une plateforme de livraison de repas complète, déployée et prête pour la production. Cette version 2.0 inclut :
 
 - ✅ Authentification JWT sécurisée
 - ✅ Base de données PostgreSQL
@@ -127,9 +127,9 @@ PUT  /users/:id/status      → Activer/Désactiver
 
 | Application | Package | Taille estimée |
 |-------------|---------|----------------|
-| **SenFood Client** | `com.senfood.client` | ~15 MB |
-| **SenFood Admin** | `com.senfood.admin` | ~12 MB |
-| **SenFood Livreur** | `com.mamadouelimane.applivreur` | ~25 MB |
+| **NOOR EAT Client** | `com.senfood.client` | ~15 MB |
+| **NOOR EAT Admin** | `com.senfood.admin` | ~12 MB |
+| **NOOR EAT Livreur** | `com.mamadouelimane.applivreur` | ~25 MB |
 
 ### 4.2 Fonctionnalités par App
 
@@ -190,7 +190,7 @@ npm test
 
 ```bash
 # PostgreSQL
-psql -c "CREATE DATABASE senfood;"
+psql -c "CREATE DATABASE nooreat;"
 
 # Variables d'environnement
 cp backend/.env.example backend/.env
@@ -309,7 +309,7 @@ Le workflow `.github/workflows/build-apps.yml` automatise :
 
 ## 11. Conclusion
 
-SenFood v2.0 est une plateforme complète, sécurisée et prête pour la production. L'architecture moderne permet une évolution facile et une maintenance simplifiée.
+NOOR EAT v2.0 est une plateforme complète, sécurisée et prête pour la production. L'architecture moderne permet une évolution facile et une maintenance simplifiée.
 
 **Points forts:**
 - Architecture modulaire

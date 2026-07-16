@@ -17,7 +17,7 @@ const clientRoutes = require('../routes/client');
 app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
 
-describe('SenFood API Tests', () => {
+describe('NOOR EAT API Tests', () => {
   let authToken;
   let userId;
 

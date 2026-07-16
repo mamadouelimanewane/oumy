@@ -1,4 +1,4 @@
-# Instructions de Build des APKs SenFood
+# Instructions de Build des APKs NOOR EAT
 
 ## Prérequis
 
@@ -56,7 +56,7 @@ $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 cd app-livreur
 npm install
 # Avec EAS (nécessite un compte Expo)
-eas build --platform android --profile preview --local --output ./senfood-livreur.apk
+eas build --platform android --profile preview --local --output ./nooreat-livreur.apk
 
 # Ou build local avec prebuild
 npx expo prebuild --platform android
@@ -77,7 +77,7 @@ Le projet est configuré avec GitHub Actions pour build automatiquement les APKs
 
 ### Lancer un build :
 1. Pousser sur la branche `main`
-2. Ou aller dans Actions > Build SenFood Apps > Run workflow
+2. Ou aller dans Actions > Build NOOR EAT Apps > Run workflow
 
 Les APKs seront disponibles en tant qu'artifacts de workflow et dans les Releases.
 

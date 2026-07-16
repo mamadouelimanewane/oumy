@@ -1,4 +1,4 @@
-name: Build SenFood Apps
+name: Build NOOR EAT Apps
 
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: senfood-client-apk
+          name: nooreat-client-apk
           path: client-pwa/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
 
@@ -127,7 +127,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: senfood-admin-apk
+          name: nooreat-admin-apk
           path: panel-admin/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
 
@@ -187,7 +187,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: senfood-dashboard-apk
+          name: nooreat-dashboard-apk
           path: dashboard-restaurant/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
 
@@ -235,7 +235,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: senfood-livreur-apk
+          name: nooreat-livreur-apk
           path: app-livreur/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
 
@@ -274,15 +274,15 @@ jobs:
         if: hashFiles('releases/*.apk') != ''
         with:
           tag_name: v${{ github.run_number }}
-          name: SenFood Release v${{ github.run_number }}
+          name: NOOR EAT Release v${{ github.run_number }}
           body: |
-            ## SenFood v${{ github.run_number }}
+            ## NOOR EAT v${{ github.run_number }}
 
             ### APKs générés :
-            - 📱 SenFood Client (PWA)
-            - 🍽️ SenFood Restaurant (Dashboard)
-            - ⚙️ SenFood Admin (Panel)
-            - 🛵 SenFood Livreur (Expo)
+            - 📱 NOOR EAT Client (PWA)
+            - 🍽️ NOOR EAT Restaurant (Dashboard)
+            - ⚙️ NOOR EAT Admin (Panel)
+            - 🛵 NOOR EAT Livreur (Expo)
 
             ### Installation
             1. Téléchargez les APKs ci-dessous
