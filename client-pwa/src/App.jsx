@@ -1,42 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Fuse from 'fuse.js';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-
-// Fix Leaflet Default Icon
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-
-// Fix Leaflet Default Icon
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-
-function LocationMarker() {
-  const [position, setPosition] = React.useState(null);
-  const map = useMap();
-
-  React.useEffect(() => {
-    map.locate().on("locationfound", function (e) {
-      setPosition(e.latlng);
-      map.flyTo(e.latlng, 14);
-    });
-  }, [map]);
-
-  return position === null ? null : (
-    <Marker position={position}>
-      <Popup>📍 Vous êtes ici</Popup>
-    </Marker>
-  );
-}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -61,91 +24,128 @@ function App() {
   const [orders, setOrders] = useState([]);
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [courierLoc, setCourierLoc] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
+  const [userAddress, setUserAddress] = useState('');
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [deliveryEstimate, setDeliveryEstimate] = useState(null);
+  const [deliveryCoords, setDeliveryCoords] = useState(null); // {lat, lng} for custom delivery address
+  const [deliveryAddressCustom, setDeliveryAddressCustom] = useState(''); // custom delivery address text
+
+  // DARK MODE
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('senfood_dark') === 'true');
+
+  // LANGUAGE
+  const [lang, setLang] = useState(() => localStorage.getItem('senfood_lang') || 'fr');
+
+  // SAVED ADDRESSES
+  const [savedAddresses, setSavedAddresses] = useState(() => {
+    try { const s = localStorage.getItem('senfood_addresses'); return s ? JSON.parse(s) : [
+      { id: 1, label: 'Maison', icon: '🏠', address: 'Sacré-Cœur 3, Dakar', lat: 14.7167, lng: -17.4677 },
+      { id: 2, label: 'Bureau', icon: '💼', address: 'Plateau, Rue Carnot', lat: 14.6697, lng: -17.4381 },
+    ]; } catch { return []; }
+  });
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [newAddressLabel, setNewAddressLabel] = useState('');
+
+  // REFERRAL
+  const referralCode = user ? `SENFOOD${user.phone?.slice(-4) || 'X'}` : 'SENFOODX';
+  const [referralCopied, setReferralCopied] = useState(false);
+
+  // MINI-GAMES
+  const [wheelSpinning, setWheelSpinning] = useState(false);
+  const [wheelResult, setWheelResult] = useState(null);
+  const [wheelRotation, setWheelRotation] = useState(0);
+  const [scratchRevealed, setScratchRevealed] = useState(false);
+  const [scratchPrize, setScratchPrize] = useState(null);
+  const [prizeHistory, setPrizeHistory] = useState(() => {
+    try { const s = localStorage.getItem('senfood_prizes'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+
+  // CHAT LIVE
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+
+  // ADVANCED FILTERS
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 50000, minRating: 0, maxDelivery: 60, diet: [], category: '' });
+
+  // RESTAURANT DETAIL
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const searchRef = useRef(null);
-  const inputRef = useRef(null);
 
-  // === LIVRAISON STATE ===
-  const [userPosition, setUserPosition] = useState(null); // {lat, lng}
-  const [deliveryPrice, setDeliveryPrice] = useState(0);
-  const [activeLivraison, setActiveLivraison] = useState(null); // null | livraison object
-  const [livreurPosition, setLivreurPosition] = useState(null); // position simulée en mouvement
-  const [livraisonStep, setLivraisonStep] = useState(0); // 0=prép 1=en route 2=livré
-  const [selectedLivreur, setSelectedLivreur] = useState(null); // pour la page admin livreurs
-  const livraisonInterval = useRef(null);
+  // NOTIFICATIONS
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: 'Bienvenue sur SenFood !', body: 'Profitez de -20% sur votre première commande', time: 'Maintenant', read: false, icon: '🎉' },
+    { id: 2, title: 'Nouveau restaurant', body: 'Chef Ousmane a ajouté 5 nouveaux plats', time: 'Il y a 2h', read: false, icon: '🍽️' },
+    { id: 3, title: 'Livraison gratuite', body: 'Ce week-end, livraison offerte dès 5000 FCFA', time: 'Hier', read: true, icon: '🚚' },
+  ]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const unreadNotifs = notifications.filter(n => !n.read).length;
 
-  // 5 Livreurs fictifs à Dakar
-  const LIVREURS = [
-    { id:1, name:"Moussa Diallo", phone:"77 432 10 98", avatar:"https://ui-avatars.com/api/?name=Moussa+Diallo&background=f97316&color=fff&size=100", lat:14.698, lng:-17.468, status:"disponible", courses:8, note:4.9, revenus:12400 },
-    { id:2, name:"Ibrahima Fall", phone:"76 543 21 09", avatar:"https://ui-avatars.com/api/?name=Ibrahima+Fall&background=22c55e&color=fff&size=100", lat:14.685, lng:-17.453, status:"en_course", courses:5, note:4.7, revenus:8750 },
-    { id:3, name:"Fatou Sarr", phone:"78 654 32 10", avatar:"https://ui-avatars.com/api/?name=Fatou+Sarr&background=8b5cf6&color=fff&size=100", lat:14.710, lng:-17.480, status:"disponible", courses:11, note:5.0, revenus:17600 },
-    { id:4, name:"Abdou Ndiaye", phone:"70 765 43 21", avatar:"https://ui-avatars.com/api/?name=Abdou+Ndiaye&background=3b82f6&color=fff&size=100", lat:14.675, lng:-17.445, status:"hors_ligne", courses:0, note:4.8, revenus:0 },
-    { id:5, name:"Aminata Diouf", phone:"77 876 54 32", avatar:"https://ui-avatars.com/api/?name=Aminata+Diouf&background=ef4444&color=fff&size=100", lat:14.702, lng:-17.460, status:"disponible", courses:6, note:4.6, revenus:9800 },
-  ];
+  // PHOTO REVIEWS
+  const [reviewOrder, setReviewOrder] = useState(null);
+  const [reviewStars, setReviewStars] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewPhoto, setReviewPhoto] = useState(null);
 
-  // Calcul distance GPS (formule Haversine)
-  const haversineKm = (lat1, lng1, lat2, lng2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  };
+  // GROUP ORDER
+  const [groupOrderCode, setGroupOrderCode] = useState(null);
+  const [groupParticipants, setGroupParticipants] = useState([]);
 
-  // Calcul prix livraison
-  const calcDeliveryPrice = (userLat, userLng, restLat, restLng) => {
-    const dist = haversineKm(userLat, userLng, restLat, restLng);
-    const dureeMin = (dist / 25) * 60; // 25 km/h vitesse moto
-    const base = 500;
-    const parKm = Math.round(dist * 200);
-    const parMin = Math.round(dureeMin * 30);
-    return { total: base + parKm + parMin, dist: dist.toFixed(1), duree: Math.round(dureeMin), base, parKm, parMin };
-  };
+  // MEAL PLAN
+  const [mealPlan, setMealPlan] = useState({ Lundi: [], Mardi: [], Mercredi: [], Jeudi: [], Vendredi: [], Samedi: [], Dimanche: [] });
+  const [mealPlanDay, setMealPlanDay] = useState(null);
+  const [mealPlanActive, setMealPlanActive] = useState(false);
 
-  // Géolocalisation utilisateur automatique
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude: lat, longitude: lng } = pos.coords;
-          setUserPosition({ lat, lng });
-          // Calcul prix délivraison par défaut depuis plateau
-          const priceData = calcDeliveryPrice(lat, lng, 14.693, -17.473);
-          setDeliveryPrice(priceData.total);
-        },
-        () => {
-          // Fallback: Plateau Dakar
-          setUserPosition({ lat: 14.693, lng: -17.450 });
-          setDeliveryPrice(800);
-        }
-      );
+  // VOICE COMMAND
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+
+  // TRANSLATIONS
+  const T = {
+    fr: {
+      explorer: 'Explorer', panier: 'Panier', commandes: 'Commandes', profil: 'Profil',
+      rechercher: 'Rechercher un plat, un restaurant...', ajouter_au_panier: 'Ajouter au panier',
+      commander: 'Commander', total: 'Total', livraison: 'Livraison', sous_total: 'Sous-total',
+      gratuite: 'Gratuite', retour: 'Retour', mon_panier: 'Mon Panier 🛒',
+      code_promo: 'Code promo', appliquer: 'Appliquer', confirmer: 'Confirmer Commande',
+      portefeuille: 'Portefeuille', defis: 'Défis & Badges', support: 'Support',
+      deconnexion: 'Déconnexion', bienvenue: 'Bienvenue !',
+      que_voulez_vous_manger: 'Que voulez-vous', manger_aujourdhui: "manger aujourd'hui ?",
+      mes_commandes: 'Mes Commandes 📦', re_commander: '🔄 Re-commander',
+      suivre_livreur: 'Suivre le livreur', aucune_commande: 'Aucune commande pour le moment',
+      panier_vide: 'Votre panier est vide', explorer_plats: 'Explorer les plats',
+      adresse_livraison: '📍 Adresse de livraison', mes_adresses: 'Mes Adresses',
+      ajouter_adresse: 'Ajouter une adresse', parrainage: 'Parrainage 🎁',
+      copier_code: 'Copier le code', code_copie: 'Copié !',
+      mini_jeux: '🎮 Mini-Jeux', roue_fortune: 'Roue de la Fortune',
+      carte_gratter: 'Carte à Gratter', historique_gains: 'Historique des gains',
+      tourner: 'Tourner la roue !', gratter: 'Gratter !', mode_sombre: 'Mode Sombre',
+      langue: 'Langue', envoyer: 'Envoyer', chat_livreur: 'Chat Livreur',
+      se_connecter: 'Se connecter', livrer_a: 'Livrer à', restaurants: 'Restaurants',
+    },
+    wo: {
+      explorer: 'Wut', panier: 'Paañe', commandes: 'Commandes yi', profil: 'Sàmm',
+      rechercher: 'Seet lekk, restoraan...', ajouter_au_panier: 'Dugal ci paañe bi',
+      commander: 'Commande', total: 'Tolaal', livraison: 'Yóbbu', sous_total: 'Suub-tolaal',
+      gratuite: 'Am njaay', retour: 'Dellu', mon_panier: 'Sama Paañe 🛒',
+      code_promo: 'Code promo', appliquer: 'Jëfandikoo', confirmer: 'Dëggal Commande bi',
+      portefeuille: 'Portmone', defis: 'Jalgati & Badges', support: 'Ndimbal',
+      deconnexion: 'Génn', bienvenue: 'Dalal Jàmm !',
+      que_voulez_vous_manger: 'Lu nga bëgg', manger_aujourdhui: 'lekk tey ?',
+      mes_commandes: 'Sama Commandes yi 📦', re_commander: '🔄 Commande ko',
+      suivre_livreur: 'Toppatoo livreur bi', aucune_commande: 'Amul commande bi tey',
+      panier_vide: 'Sa paañe bi amul dara', explorer_plats: 'Wut lekk yi',
+      adresse_livraison: '📍 Adresse yóbbu', mes_adresses: 'Sama Adresses yi',
+      ajouter_adresse: 'Dugal adresse bu bees', parrainage: 'Parrainage 🎁',
+      copier_code: 'Copier code bi', code_copie: 'Copie na !',
+      mini_jeux: '🎮 Po yi', roue_fortune: 'Roue bu Chance',
+      carte_gratter: 'Carte bu Gratter', historique_gains: 'Liggéey gains yi',
+      tourner: 'Wëndeelu roue bi !', gratter: 'Grattee !', mode_sombre: 'Leer bu Lëndëm',
+      langue: 'Làkk', envoyer: 'Yónnee', chat_livreur: 'Chat ak livreur bi',
+      se_connecter: 'Duggu', livrer_a: 'Yóbbu ci', restaurants: 'Restoraan yi',
     }
-  }, []);
-
-  // Simulation du mouvement du livreur vers le client
-  const startLivraisonSimulation = (livreur, destLat, destLng) => {
-    let step = 0;
-    const totalSteps = 30;
-    const startLat = livreur.lat;
-    const startLng = livreur.lng;
-    setLivreurPosition({ lat: startLat, lng: startLng });
-    setLivraisonStep(1);
-    if (livraisonInterval.current) clearInterval(livraisonInterval.current);
-    livraisonInterval.current = setInterval(() => {
-      step++;
-      const progress = step / totalSteps;
-      const curLat = startLat + (destLat - startLat) * progress;
-      const curLng = startLng + (destLng - startLng) * progress;
-      setLivreurPosition({ lat: curLat, lng: curLng });
-      if (step >= totalSteps) {
-        clearInterval(livraisonInterval.current);
-        setLivraisonStep(2);
-      }
-    }, 2000); // toutes les 2 secondes
   };
-
 
   // AUTH CHECK
   useEffect(() => {
@@ -156,6 +156,146 @@ function App() {
       setUser(JSON.parse(savedUser));
     }
   }, []);
+
+  // DARK MODE EFFECT
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem('senfood_dark', darkMode);
+  }, [darkMode]);
+
+  // LANGUAGE PERSISTENCE
+  useEffect(() => {
+    localStorage.setItem('senfood_lang', lang);
+  }, [lang]);
+
+  // SAVED ADDRESSES PERSISTENCE
+  useEffect(() => {
+    localStorage.setItem('senfood_addresses', JSON.stringify(savedAddresses));
+  }, [savedAddresses]);
+
+  // PRIZE HISTORY PERSISTENCE
+  useEffect(() => {
+    localStorage.setItem('senfood_prizes', JSON.stringify(prizeHistory));
+  }, [prizeHistory]);
+
+  // CHAT LIVE SEND
+  const sendChatMessage = async (msg) => {
+    if (!msg.trim()) return;
+    const newMsg = { id: Date.now(), text: msg, sender: 'client', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
+    setChatMessages(prev => [...prev, newMsg]);
+    setChatInput('');
+    try {
+      const { chatLiveAPI } = await import('./api');
+      const response = await chatLiveAPI.send({ orderId: trackingOrder?.id, message: msg });
+      if (response?.message) {
+        setChatMessages(prev => [...prev, { id: Date.now() + 1, text: response.message, sender: 'courier', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }]);
+      }
+    } catch {
+      // Auto-reply simulation if API unavailable
+      setTimeout(() => {
+        setChatMessages(prev => [...prev, { id: Date.now() + 1, text: "J'arrive dans quelques minutes ! 🏍️", sender: 'courier', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }]);
+      }, 1500);
+    }
+  };
+
+  // WHEEL SPIN HANDLER
+  const spinWheel = () => {
+    if (wheelSpinning) return;
+    setWheelSpinning(true);
+    setWheelResult(null);
+    const prizes = ['500 FCFA', '100 FCFA', 'Livraison gratuite', '200 FCFA', 'Dessert offert', '50 FCFA', '1000 FCFA', 'Rien'];
+    const idx = Math.floor(Math.random() * prizes.length);
+    const newRotation = wheelRotation + 1440 + (idx * 45) + Math.random() * 30;
+    setWheelRotation(newRotation);
+    setTimeout(() => {
+      setWheelSpinning(false);
+      const prize = prizes[idx];
+      setWheelResult(prize);
+      if (prize !== 'Rien') {
+        setPrizeHistory(prev => [{ prize, date: new Date().toLocaleDateString('fr-FR'), type: 'roue' }, ...prev].slice(0, 20));
+      }
+    }, 4000);
+  };
+
+  // SCRATCH CARD HANDLER
+  const revealScratch = () => {
+    if (scratchRevealed) return;
+    const prizes = ['200 FCFA', '500 FCFA', 'Livraison gratuite', '100 FCFA', 'Rien', '300 FCFA'];
+    const prize = prizes[Math.floor(Math.random() * prizes.length)];
+    setScratchPrize(prize);
+    setScratchRevealed(true);
+    if (prize !== 'Rien') {
+      setPrizeHistory(prev => [{ prize, date: new Date().toLocaleDateString('fr-FR'), type: 'gratter' }, ...prev].slice(0, 20));
+    }
+  };
+
+  // RE-ORDER HANDLER
+  const reOrder = (order) => {
+    if (order.items && order.items.length > 0) {
+      setPanier(order.items.map(item => ({ ...item, qty: item.qty || 1 })));
+    }
+    setActivePage('panier');
+  };
+
+  // GEOLOCATION - Detect user position
+  const detectLocation = async () => {
+    setGeoLoading(true);
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+      });
+      const { latitude, longitude } = pos.coords;
+      setUserLocation({ lat: latitude, lng: longitude });
+
+      // Reverse geocode with OpenStreetMap Nominatim (free, no API key)
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&accept-language=fr`);
+        const data = await res.json();
+        const addr = data.address;
+        const shortAddr = addr.suburb || addr.neighbourhood || addr.city_district || addr.city || 'Dakar';
+        setUserAddress(`${shortAddr}, ${addr.city || addr.state || 'Sénégal'}`);
+      } catch { setUserAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`); }
+    } catch (err) {
+      console.warn('Geolocation error:', err.message);
+      // Default to Dakar center
+      setUserLocation({ lat: 14.6937, lng: -17.4441 });
+      setUserAddress('Plateau, Dakar');
+    }
+    setGeoLoading(false);
+  };
+
+  useEffect(() => { detectLocation(); }, []);
+
+  // Calculate delivery distance/fee estimate
+  const calculateDeliveryEstimate = async (restaurantLat, restaurantLng) => {
+    if (!userLocation) return;
+    const R = 6371;
+    const dLat = (userLocation.lat - restaurantLat) * Math.PI / 180;
+    const dLng = (userLocation.lng - restaurantLng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(restaurantLat * Math.PI / 180) * Math.cos(userLocation.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const fee = Math.ceil((500 + dist * 200) / 100) * 100;
+    setDeliveryEstimate({
+      distance_km: Math.round(dist * 10) / 10,
+      delivery_fee: fee,
+      estimated_time_min: Math.round(dist * 4 + 10),
+    });
+  };
+
+  // Auto-calculate delivery estimate when userLocation is available
+  useEffect(() => {
+    if (userLocation && !deliveryEstimate) {
+      // Default estimate from Dakar center
+      const R = 6371;
+      const rLat = 14.6937; const rLng = -17.4441;
+      const dLat = (userLocation.lat - rLat) * Math.PI / 180;
+      const dLng = (userLocation.lng - rLng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(rLat * Math.PI / 180) * Math.cos(userLocation.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const fee = Math.ceil((500 + dist * 200) / 100) * 100;
+      setDeliveryEstimate({ distance_km: Math.round(dist * 10) / 10, delivery_fee: fee, estimated_time_min: Math.round(dist * 4 + 10) });
+    }
+  }, [userLocation]);
 
   // SOCKET.IO
   useEffect(() => {
@@ -197,11 +337,9 @@ function App() {
   const addToPanier = (plat) => {
     setPanier(prev => {
       // Vérifier si le panier contient déjà des produits d'un autre restaurant
-      if (prev.length > 0 && prev[0].restaurant_id !== plat.restaurant_id) {
-         if (confirm("Votre panier contient des produits d'un autre restaurant. Voulez-vous vider le panier pour ce nouveau restaurant ?")) {
-            return [{...plat, qty: 1}];
-         }
-         return prev;
+      if (prev.length > 0 && prev[0].restaurant_id && plat.restaurant_id && prev[0].restaurant_id !== plat.restaurant_id) {
+         // Auto-switch restaurant cart
+         return [{...plat, qty: 1}];
       }
       const exists = prev.find(p => p.id === plat.id);
       if (exists) return prev.map(p => p.id === plat.id ? {...p, qty: p.qty + 1} : p);
@@ -221,14 +359,18 @@ function App() {
     setOrderStatus('loading');
     try {
       const { clientAPI } = await import('./api');
+      const finalLat = deliveryCoords?.lat || userLocation?.lat || 14.6937;
+      const finalLng = deliveryCoords?.lng || userLocation?.lng || -17.4441;
+      const finalAddr = deliveryAddressCustom || userAddress || "Plateau, Dakar";
       const orderData = {
         restaurant_id: panier[0].restaurant_id,
         items: panier.map(p => ({ menu_item_id: p.id, quantity: p.qty })),
-        delivery_address: "Plateau, Dakar", // Placeholder, ideally from user profile
-        latitude: 14.6937,
-        longitude: -17.4441,
+        delivery_address: finalAddr,
+        latitude: finalLat,
+        longitude: finalLng,
         payment_method: paymentMethod,
-        promo_code: promoApplied ? promoCode : null
+        promo_code: promoApplied ? promoCode : null,
+        delivery_fee: deliveryEstimate?.delivery_fee || 0
       };
 
       await clientAPI.createOrder(orderData);
@@ -237,6 +379,8 @@ function App() {
       setPromoCode('');
       setPromoDiscount(0);
       setPromoApplied(false);
+      setDeliveryAddressCustom('');
+      setDeliveryCoords(null);
       setOrderStatus('success');
       setTimeout(() => {
         setOrderStatus(null);
@@ -265,23 +409,9 @@ function App() {
 
   const totalPanier = panier.reduce((acc, p) => acc + (p.price * p.qty), 0);
 
-  const RESTAURANTS_DATA = {
-    "Alkimia": { lat: 14.743, lng: -17.513, desc: "Restaurant gastronomique, spécialités de la mer aux Almadies" },
-    "Le Lagon 1": { lat: 14.667, lng: -17.433, desc: "Fruits de mer avec vue imprenable sur l'océan, Plateau" },
-    "Radisson Blu": { lat: 14.693, lng: -17.473, desc: "Restaurant de l'hôtel 5 étoiles, Sea Plaza" },
-    "Terrou-Bi": { lat: 14.685, lng: -17.465, desc: "Gastronomie et cadre luxueux sur la Corniche" },
-    "KFC Sea Plaza": { lat: 14.693, lng: -17.473, desc: "Le célèbre poulet frit" },
-    "Burger King": { lat: 14.693, lng: -17.473, desc: "Burgers grillés à la flamme" },
-    "Chez Loutcha": { lat: 14.668, lng: -17.435, desc: "Cuisine généreuse sénégalaise et cap-verdienne" },
-    "La Fourchette": { lat: 14.666, lng: -17.432, desc: "Cuisine internationale et fusion au Plateau" },
-    "Le Djoloff": { lat: 14.685, lng: -17.471, desc: "Restaurant boutique hôtel à Fann Hock" },
-    "Noflaye Beach": { lat: 14.750, lng: -17.520, desc: "Crêperie et grillades en bord de mer, Almadies" },
-    "Chef Ousmane (Dark Kitchen)": { lat: 14.710, lng: -17.460, desc: "Saveurs authentiques faites maison" },
-    "Sen Burger Dakar": { lat: 14.692, lng: -17.465, desc: "Fast-food de qualité 100% sénégalais" }
-  };
-
   // DONNÉES STATIQUES (50 plats certifiés) - garantit l'affichage même sans serveur
   const STATIC_PLATS = [
+    { id:1, name:"Le Classique", description:"Steak haché pur bœuf, cheddar, salade, tomate", price:3500, category:"Fast Food", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80", rating:"4.7", deliveryTime:"20-30 min", featured:false },
     { id:2, name:"Tiep Bou Dien Rouge", description:"Le plat national sénégalais avec du poisson et riz rouge", price:3000, category:"Sénégalais", restaurant_name:"Chef Ousmane (Dark Kitchen)", image_url:"https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&q=80", rating:"4.9", deliveryTime:"25-35 min", featured:true },
     { id:3, name:"Pizza Margherita", description:"Sauce tomate, mozzarella fraîche, basilic", price:5000, category:"Pizza", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=500&q=80", rating:"4.5", deliveryTime:"20-30 min", featured:false },
     { id:4, name:"Jus de Bissap", description:"Délicieux jus d'hibiscus rafraîchissant", price:1000, category:"Jus Locaux", restaurant_name:"Chef Ousmane (Dark Kitchen)", image_url:"https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&q=80", rating:"4.8", deliveryTime:"10-15 min", featured:false },
@@ -331,38 +461,6 @@ function App() {
     { id:48, name:"Pizza Végétarienne", description:"Légumes rôtis, roquette, copeaux de parmesan", price:5500, category:"Pizza", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1571066811602-716837d681de?w=500&q=80", rating:"4.5", deliveryTime:"25-35 min", featured:false },
     { id:49, name:"Salade Grecque", description:"Concombre, feta, olives noires, tomates, origan", price:3500, category:"Salades", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&q=80", rating:"4.6", deliveryTime:"10-20 min", featured:false },
     { id:50, name:"Lakh", description:"Semoule au lait caillé sucré, dessert traditionnel sénégalais", price:1500, category:"Desserts", restaurant_name:"Chef Ousmane (Dark Kitchen)", image_url:"https://images.unsplash.com/photo-1488477181946-6428a0291777?w=500&q=80", rating:"4.8", deliveryTime:"10-15 min", featured:true },
-    { id:1, name:"Le Classique", description:"Steak haché pur bœuf, cheddar, salade, tomate", price:3500, category:"Fast Food", restaurant_name:"Sen Burger Dakar", image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80", rating:"4.7", deliveryTime:"20-30 min", featured:false },
-    { id:51, name:"Thiof Braisé", description:"Mérou blanc braisé aux épices douces, frites de patate douce", price:12000, category:"Grillades", restaurant_name:"Le Lagon 1", image_url:"https://images.unsplash.com/photo-1544979144-411a76d4dfba?w=500&q=80", rating:"4.9", deliveryTime:"35-45 min", featured:true },
-    { id:52, name:"Filet de Bœuf Rossini", description:"Filet mignon, foie gras, sauce aux truffes", price:25000, category:"Gastronomie", restaurant_name:"Terrou-Bi", image_url:"https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&q=80", rating:"5.0", deliveryTime:"40-50 min", featured:true },
-    { id:53, name:"Bucket 10 Pièces", description:"10 pièces de poulet frit croustillant, frites familiales", price:15000, category:"Fast Food", restaurant_name:"KFC Sea Plaza", image_url:"https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=500&q=80", rating:"4.5", deliveryTime:"20-30 min", featured:false },
-    { id:54, name:"Whopper", description:"Le légendaire burger au bœuf grillé à la flamme", price:4500, category:"Fast Food", restaurant_name:"Burger King", image_url:"https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?w=500&q=80", rating:"4.6", deliveryTime:"15-25 min", featured:true },
-    { id:55, name:"Catchupa", description:"Ragoût cap-verdien riche au maïs, haricots, viandes", price:4000, category:"Africain", restaurant_name:"Chez Loutcha", image_url:"https://images.unsplash.com/photo-1602253057119-44d745d9b860?w=500&q=80", rating:"4.8", deliveryTime:"25-35 min", featured:true },
-    { id:56, name:"Sushi Boat", description:"Assortiment premium de 24 sushis, makis et sashimis", price:22000, category:"Asiatique", restaurant_name:"La Fourchette", image_url:"https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=500&q=80", rating:"4.9", deliveryTime:"30-40 min", featured:false },
-    { id:57, name:"Brunch Royal", description:"Viennoiseries, saumon fumé, œufs bénédictine, jus frais", price:18000, category:"Brunch", restaurant_name:"Radisson Blu", image_url:"https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=500&q=80", rating:"4.7", deliveryTime:"30-45 min", featured:false },
-    { id:58, name:"Ceviche de Daurade", description:"Daurade fraîche marinée au citron vert et fruit de la passion", price:11000, category:"Gastronomie", restaurant_name:"Alkimia", image_url:"https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&q=80", rating:"4.8", deliveryTime:"25-35 min", featured:false },
-    { id:59, name:"Crevettes à la Plancha", description:"Grandes crevettes grillées, riz safrané, sauce à l'ail", price:8000, category:"Grillades", restaurant_name:"Le Djoloff", image_url:"https://images.unsplash.com/photo-1559742811-822873691fc8?w=500&q=80", rating:"4.7", deliveryTime:"25-35 min", featured:false },
-    { id:60, name:"Crêpe Complète", description:"Jambon, œuf, fromage, champignons sur galette sarrasin", price:4500, category:"Crêpes", restaurant_name:"Noflaye Beach", image_url:"https://images.unsplash.com/photo-1519676867240-f03562e64548?w=500&q=80", rating:"4.6", deliveryTime:"20-30 min", featured:true },
-    { id:61, name:"Carpaccio de Saumon", description:"Saumon d'Écosse, huile d'olive vierge, citron et câpres", price:9000, category:"Gastronomie", restaurant_name:"Alkimia", image_url:"https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&q=80", rating:"4.8", deliveryTime:"25-35 min", featured:false },
-    { id:62, name:"Langouste Grillée", description:"Demi-langouste rôtie au beurre d'ail, pommes grenailles", price:18000, category:"Gastronomie", restaurant_name:"Alkimia", image_url:"https://images.unsplash.com/photo-1559742811-822873691fc8?w=500&q=80", rating:"4.9", deliveryTime:"35-45 min", featured:true },
-    { id:63, name:"Fondant au Chocolat", description:"Cœur coulant chocolat noir, glace vanille de Madagascar", price:5000, category:"Desserts", restaurant_name:"Alkimia", image_url:"https://images.unsplash.com/photo-1511381939415-e440c9c3e981?w=500&q=80", rating:"4.7", deliveryTime:"15-25 min", featured:false },
-    { id:64, name:"Plateau de Fruits de Mer", description:"Huîtres, crevettes, bulots et langoustines sur glace", price:22000, category:"Gastronomie", restaurant_name:"Le Lagon 1", image_url:"https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=500&q=80", rating:"4.9", deliveryTime:"40-50 min", featured:true },
-    { id:65, name:"Sole Meunière", description:"Sole fraîche au beurre noisette, persil et citron", price:14000, category:"Gastronomie", restaurant_name:"Le Lagon 1", image_url:"https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&q=80", rating:"4.8", deliveryTime:"35-45 min", featured:false },
-    { id:66, name:"Club Sandwich Premium", description:"Poulet rôti, bacon, œuf, crudités, frites maison", price:8500, category:"Fast Food", restaurant_name:"Radisson Blu", image_url:"https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=500&q=80", rating:"4.5", deliveryTime:"25-35 min", featured:false },
-    { id:67, name:"Entrecôte Angus (300g)", description:"Viande d'exception, sauce béarnaise et pommes sautées", price:19500, category:"Grillades", restaurant_name:"Radisson Blu", image_url:"https://images.unsplash.com/photo-1544025162-831e5fcc0bb4?w=500&q=80", rating:"4.9", deliveryTime:"35-45 min", featured:true },
-    { id:68, name:"Magret de Canard au Miel", description:"Magret du sud-ouest, sauce miel et purée de patates douces", price:16000, category:"Gastronomie", restaurant_name:"Terrou-Bi", image_url:"https://images.unsplash.com/photo-1514326640560-7d063ef2aed5?w=500&q=80", rating:"4.8", deliveryTime:"35-45 min", featured:true },
-    { id:69, name:"Tiramisu au Café Touba", description:"Le classique italien revisité avec du café sénégalais parfumé", price:4500, category:"Desserts", restaurant_name:"Terrou-Bi", image_url:"https://images.unsplash.com/photo-1571115177098-24de63ef3e18?w=500&q=80", rating:"4.9", deliveryTime:"15-20 min", featured:false },
-    { id:70, name:"Menu Zinger Burger", description:"Burger poulet épicé, frites moyennes, boisson", price:4500, category:"Fast Food", restaurant_name:"KFC Sea Plaza", image_url:"https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=500&q=80", rating:"4.6", deliveryTime:"20-30 min", featured:true },
-    { id:71, name:"Tenders (5 pièces)", description:"Vrais filets de poulet panés et croustillants", price:3500, category:"Fast Food", restaurant_name:"KFC Sea Plaza", image_url:"https://images.unsplash.com/photo-1562967914-01efa7e87832?w=500&q=80", rating:"4.7", deliveryTime:"15-25 min", featured:false },
-    { id:72, name:"Menu Long Chicken", description:"Long sandwich au poulet pané, frites, boisson", price:4200, category:"Fast Food", restaurant_name:"Burger King", image_url:"https://images.unsplash.com/photo-1610440042657-612c34d95e9f?w=500&q=80", rating:"4.4", deliveryTime:"15-25 min", featured:false },
-    { id:73, name:"Onion Rings", description:"Rondelles d'oignons frites et croustillantes", price:1500, category:"Fast Food", restaurant_name:"Burger King", image_url:"https://images.unsplash.com/photo-1639024471210-20512809187f?w=500&q=80", rating:"4.5", deliveryTime:"10-20 min", featured:false },
-    { id:74, name:"Thiou aux Crevettes", description:"Sauce tomate riche aux grosses crevettes et riz blanc", price:5500, category:"Sénégalais", restaurant_name:"Chez Loutcha", image_url:"https://images.unsplash.com/photo-1547592180-85f173990554?w=500&q=80", rating:"4.8", deliveryTime:"30-40 min", featured:true },
-    { id:75, name:"Poulet Braisé", description:"Poulet entier mariné et grillé, sauce oignon, alloco", price:7000, category:"Africain", restaurant_name:"Chez Loutcha", image_url:"https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=500&q=80", rating:"4.9", deliveryTime:"35-45 min", featured:false },
-    { id:76, name:"Pad Thaï aux Crevettes", description:"Pâtes de riz sautées, tofu, crevettes, cacahuètes", price:6500, category:"Asiatique", restaurant_name:"La Fourchette", image_url:"https://images.unsplash.com/photo-1559314809-0d155014e29e?w=500&q=80", rating:"4.7", deliveryTime:"25-35 min", featured:true },
-    { id:77, name:"Ceviche Péruvien", description:"Poisson frais mariné au lait de tigre, patate douce", price:7500, category:"Gastronomie", restaurant_name:"La Fourchette", image_url:"https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&q=80", rating:"4.8", deliveryTime:"20-30 min", featured:false },
-    { id:78, name:"Burger Djoloff", description:"Pain brioché, steak haché maison, confit d'oignons", price:6000, category:"Fast Food", restaurant_name:"Le Djoloff", image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80", rating:"4.6", deliveryTime:"25-35 min", featured:true },
-    { id:79, name:"Brochettes de Lotte", description:"Lotte marinée aux épices douces, grillée au feu de bois", price:8500, category:"Grillades", restaurant_name:"Le Djoloff", image_url:"https://images.unsplash.com/photo-1529042410759-befb1204b468?w=500&q=80", rating:"4.7", deliveryTime:"30-40 min", featured:false },
-    { id:80, name:"Gaufre au Nutella", description:"Gaufre tiède croustillante nappée de chocolat noisette", price:2500, category:"Desserts", restaurant_name:"Noflaye Beach", image_url:"https://images.unsplash.com/photo-1562376552-0d160a2f9fc6?w=500&q=80", rating:"4.8", deliveryTime:"15-25 min", featured:true },
-    { id:81, name:"Smoothie Mangue-Passion", description:"Fruits frais mixés, rafraîchissant pour l'été", price:2000, category:"Jus Locaux", restaurant_name:"Noflaye Beach", image_url:"https://images.unsplash.com/photo-1622597467836-f3e6707f4b0d?w=500&q=80", rating:"4.9", deliveryTime:"10-15 min", featured:false }
   ];
 
   // FETCH BDD (essai live, fallback sur données statiques)
@@ -403,63 +501,36 @@ function App() {
     { name: 'Chawarma', icon: '🌯' },
   ];
 
-  // Moteur de recherche sémantique (Fuse.js) — plats ET restaurants
+  // Moteur de recherche sémantique (Fuse.js)
   const fuse = useMemo(() => new Fuse(plats, {
-    keys: [
-      { name: 'name',            weight: 0.5 },
-      { name: 'restaurant_name', weight: 0.3 },
-      { name: 'category',        weight: 0.1 },
-      { name: 'description',     weight: 0.1 },
-    ],
-    threshold: 0.35,
+    keys: ['name', 'description', 'category'],
+    threshold: 0.4, // Sensibilité (0 = exact, 1 = n'importe quoi)
     includeScore: true
   }), [plats]);
-
-  // Résultats live pour le dropdown de suggestions
-  const searchResults = useMemo(() => {
-    if (searchQuery.trim().length < 2) return { restaurants: [], plats: [], allItems: [] };
-    const results = fuse.search(searchQuery);
-    const seen = new Set();
-    const matchedRestaurants = [];
-    const matchedPlats = [];
-    results.forEach(({ item }) => {
-      if (!seen.has(item.restaurant_name)) {
-        seen.add(item.restaurant_name);
-        matchedRestaurants.push(item.restaurant_name);
-      }
-      if (matchedPlats.length < 5) matchedPlats.push(item);
-    });
-    const allItems = [
-      ...matchedRestaurants.slice(0, 4).map(r => ({ type: 'restaurant', label: r })),
-      ...matchedPlats.map(p => ({ type: 'plat', label: p.name, plat: p }))
-    ];
-    return { restaurants: matchedRestaurants.slice(0, 4), plats: matchedPlats, allItems };
-  }, [searchQuery, fuse]);
-
-  // Ghost text: complète la saisie avec le premier résultat
-  const ghostHint = useMemo(() => {
-    if (!searchQuery || searchQuery.trim().length < 2) return '';
-    const first = searchResults.allItems[0];
-    if (!first) return '';
-    const label = first.label;
-    if (label.toLowerCase().startsWith(searchQuery.toLowerCase())) {
-      return searchQuery + label.slice(searchQuery.length);
-    }
-    return '';
-  }, [searchQuery, searchResults]);
-
 
   const filteredPlats = useMemo(() => {
     let result = activeCategory === 'Tous'
       ? plats
       : plats.filter(p => p.category === activeCategory);
-    if (searchQuery.trim().length > 1) {
-      const searchRes = fuse.search(searchQuery);
-      result = searchRes.map(r => r.item);
-    }
-    return result;
-  }, [plats, activeCategory, searchQuery, fuse]);
 
+    if (searchQuery.trim().length > 1) {
+      const searchResults = fuse.search(searchQuery);
+      result = searchResults.map(r => r.item);
+    }
+
+    // Advanced filters
+    if (filters.minPrice > 0) result = result.filter(p => p.price >= filters.minPrice);
+    if (filters.maxPrice < 50000) result = result.filter(p => p.price <= filters.maxPrice);
+    if (filters.minRating > 0) result = result.filter(p => parseFloat(p.rating) >= filters.minRating);
+    if (filters.maxDelivery < 60) {
+      result = result.filter(p => {
+        const match = p.deliveryTime?.match(/(\d+)/);
+        return match ? parseInt(match[1]) <= filters.maxDelivery : true;
+      });
+    }
+
+    return result;
+  }, [plats, activeCategory, searchQuery, fuse, filters]);
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 relative">
@@ -514,9 +585,9 @@ function App() {
                   <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                </div>
                <div>
-                 <p className="text-gray-400 text-sm font-medium">Livrer à</p>
+                 <p className="text-gray-400 text-sm font-medium">{T[lang].livrer_a}</p>
                  <div className="flex items-center gap-2 cursor-pointer">
-                   <span className="font-bold text-lg md:text-xl">Plateau, Dakar 🇸🇳</span>
+                   <span onClick={detectLocation} className="font-bold text-lg md:text-xl cursor-pointer">{geoLoading ? '📍 Localisation...' : `${userAddress || 'Plateau, Dakar'} 🇸🇳`}</span>
                    <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                  </div>
                </div>
@@ -529,195 +600,116 @@ function App() {
                 </div>
               ) : (
                 <button onClick={() => setActivePage('profil')} className="bg-primary hover:bg-orange-600 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20">
-                  Se connecter
+                  {T[lang].se_connecter}
                 </button>
               )}
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all cursor-pointer">
+              <div onClick={() => setActivePage('notifications')} className="relative w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all cursor-pointer">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                {unreadNotifs > 0 && <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-bounce">{unreadNotifs}</span>}
               </div>
             </div>
           </div>
 
           <div className="max-w-2xl">
-            <h1 className="text-3xl md:text-5xl font-extrabold mb-1 tracking-tight">Que voulez-vous</h1>
-            <h1 className="text-3xl md:text-5xl font-extrabold text-primary mb-8 tracking-tight">manger aujourd'hui ?</h1>
+            <h1 className="text-3xl md:text-5xl font-extrabold mb-1 tracking-tight">{T[lang].que_voulez_vous_manger}</h1>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-primary mb-8 tracking-tight">{T[lang].manger_aujourdhui}</h1>
           </div>
 
-          {/* Search Bar with Ghost-text Autocomplete */}
-          <div className="relative max-w-xl" ref={searchRef}>
-            <div className={`glass rounded-2xl flex items-center p-2 group transition-all ${
-              searchOpen && searchQuery ? 'ring-4 ring-primary/25 rounded-b-none' : 'focus-within:ring-4 focus-within:ring-primary/20'
-            }`}>
-              <svg className="w-6 h-6 text-gray-500 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-
-              {/* Ghost text layer + real input stacked */}
-              <div className="relative flex-1 mx-3 h-8 flex items-center">
-                {/* Ghost text (behind the real input) */}
-                {ghostHint && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 flex items-center pointer-events-none select-none font-medium text-base"
-                    style={{whiteSpace:'pre'}}
-                  >
-                    <span className="text-transparent">{searchQuery}</span>
-                    <span className="text-gray-400/60">{ghostHint.slice(searchQuery.length)}</span>
-                  </span>
-                )}
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); setActiveIndex(-1); }}
-                  onFocus={() => setSearchOpen(true)}
-                  onBlur={() => setTimeout(() => { setSearchOpen(false); setActiveIndex(-1); }, 150)}
-                  onKeyDown={(e) => {
-                    const items = searchResults.allItems;
-                    if (e.key === 'Tab' || e.key === 'ArrowRight') {
-                      if (ghostHint) { e.preventDefault(); setSearchQuery(ghostHint); setActiveIndex(-1); }
-                    } else if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setActiveIndex(i => Math.min(i + 1, items.length - 1));
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setActiveIndex(i => Math.max(i - 1, -1));
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const selected = items[activeIndex];
-                      if (selected) {
-                        if (selected.type === 'restaurant') {
-                          setSelectedRestaurant(selected.label); setActivePage('restaurant-detail');
-                        } else {
-                          addToPanier(selected.plat);
-                        }
-                        setSearchQuery(''); setSearchOpen(false); setActiveIndex(-1);
-                      } else if (ghostHint) {
-                        setSearchQuery(ghostHint);
-                      }
-                    } else if (e.key === 'Escape') {
-                      setSearchOpen(false); setActiveIndex(-1); setSearchQuery('');
-                    }
-                  }}
-                  placeholder="Plat, restaurant, cuisine..."
-                  className="relative w-full bg-transparent border-none focus:outline-none text-gray-800 placeholder-gray-500 font-medium text-base"
-                  autoComplete="off"
-                />
-              </div>
-
-              {searchQuery && (
-                <button onClick={() => { setSearchQuery(''); setSearchOpen(false); setActiveIndex(-1); }} className="p-1 text-gray-400 hover:text-gray-600 mr-1 flex-shrink-0">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-              )}
-              <button className="bg-primary hover:bg-orange-600 text-white rounded-xl p-3 transition-colors flex-shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          {/* Search Bar */}
+          <div className="relative glass rounded-2xl flex items-center p-2 max-w-xl group focus-within:ring-4 focus-within:ring-primary/20 transition-all">
+            <svg className="w-6 h-6 text-gray-500 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input 
+              type="text" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={T[lang].rechercher}
+              className="w-full bg-transparent border-none focus:outline-none text-gray-800 px-3 placeholder-gray-500 font-medium"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery("")}
+                className="p-1 text-gray-400 hover:text-gray-600 mr-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
-            </div>
-
-            {/* Hint pill: Tab to accept */}
-            {ghostHint && searchOpen && activeIndex === -1 && (
-              <div className="absolute right-16 top-1/2 -translate-y-1/2 pointer-events-none">
-                <span className="text-[10px] font-black text-gray-400 bg-white/80 border border-gray-200 px-2 py-1 rounded-md tracking-wide">
-                  Tab ↵
-                </span>
-              </div>
             )}
+            {/* Voice Command Button */}
+            <button
+              onClick={() => {
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                  const recognition = new SpeechRecognition();
+                  recognition.lang = lang === 'wo' ? 'fr-FR' : 'fr-FR';
+                  recognition.continuous = false;
+                  recognition.onstart = () => setVoiceListening(true);
+                  recognition.onresult = (e) => { setSearchQuery(e.results[0][0].transcript); setVoiceListening(false); };
+                  recognition.onerror = () => setVoiceListening(false);
+                  recognition.onend = () => setVoiceListening(false);
+                  recognition.start();
+                } else { alert('Commande vocale non supportée'); }
+              }}
+              className={`p-3 rounded-xl transition-colors ${voiceListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/80 text-gray-500 hover:text-primary'}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+            </button>
+            {/* Filter Button */}
+            <button onClick={() => setShowFilters(!showFilters)} className="bg-primary hover:bg-orange-600 text-white rounded-xl p-3 transition-colors relative">
+               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+               {(filters.minPrice > 0 || filters.maxPrice < 50000 || filters.minRating > 0 || filters.maxDelivery < 60) && (
+                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+               )}
+            </button>
+          </div>
 
-            {/* Dropdown suggestions */}
-            {searchOpen && searchQuery.trim().length >= 2 && (searchResults.restaurants.length > 0 || searchResults.plats.length > 0) && (
-              <div className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-xl rounded-b-2xl shadow-2xl border border-gray-100 border-t-0 z-[200] overflow-hidden max-h-[70vh] overflow-y-auto">
-
-                {/* Section Restaurants */}
-                {searchResults.restaurants.length > 0 && (
-                  <div>
-                    <div className="px-4 pt-3 pb-1">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">🏪 Restaurants</span>
-                    </div>
-                    {searchResults.restaurants.map((restName, idx) => {
-                      const rImg = plats.find(p => p.restaurant_name === restName)?.image_url;
-                      const isActive = activeIndex === idx;
-                      return (
-                        <button
-                          key={restName}
-                          onMouseDown={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); setSearchQuery(''); setSearchOpen(false); }}
-                          onMouseEnter={() => setActiveIndex(idx)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group ${
-                            isActive ? 'bg-orange-50' : 'hover:bg-orange-50'
-                          }`}
-                        >
-                          <img src={rImg} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-gray-900 text-sm truncate">
-                              {restName.toLowerCase().startsWith(searchQuery.toLowerCase())
-                                ? <><span className="text-primary">{restName.slice(0, searchQuery.length)}</span>{restName.slice(searchQuery.length)}</>
-                                : restName
-                              }
-                            </p>
-                            <p className="text-xs text-gray-400">{plats.filter(p => p.restaurant_name === restName).length} plats disponibles</p>
-                          </div>
-                          <svg className={`w-4 h-4 transition-colors ${isActive ? 'text-primary' : 'text-gray-300 group-hover:text-primary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
-                        </button>
-                      );
-                    })}
+          {/* FILTER PANEL */}
+          {showFilters && (
+            <div className="mt-4 glass rounded-2xl p-6 animate-in slide-in-from-top duration-300">
+              <h4 className="font-black text-white text-sm mb-4">{lang === 'fr' ? 'Filtres avancés' : 'Filtres yi'}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Prix */}
+                <div>
+                  <label className="text-[10px] font-bold text-white/60 uppercase">{lang === 'fr' ? 'Prix min' : 'Prix min'}</label>
+                  <input type="number" value={filters.minPrice} onChange={e => setFilters(f => ({...f, minPrice: +e.target.value}))} className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white font-bold outline-none" placeholder="0" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/60 uppercase">{lang === 'fr' ? 'Prix max' : 'Prix max'}</label>
+                  <input type="number" value={filters.maxPrice} onChange={e => setFilters(f => ({...f, maxPrice: +e.target.value}))} className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white font-bold outline-none" placeholder="50000" />
+                </div>
+                {/* Rating */}
+                <div className="col-span-2">
+                  <label className="text-[10px] font-bold text-white/60 uppercase mb-2 block">{lang === 'fr' ? 'Note minimum' : 'Note minimum'}</label>
+                  <div className="flex gap-2">
+                    {[0, 3, 3.5, 4, 4.5].map(r => (
+                      <button key={r} onClick={() => setFilters(f => ({...f, minRating: r}))}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${filters.minRating === r ? 'bg-primary text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+                        {r === 0 ? 'Tous' : `${r}⭐`}
+                      </button>
+                    ))}
                   </div>
-                )}
-
-                {/* Divider */}
-                {searchResults.restaurants.length > 0 && searchResults.plats.length > 0 && (
-                  <div className="mx-4 border-t border-gray-100"></div>
-                )}
-
-                {/* Section Plats */}
-                {searchResults.plats.length > 0 && (
-                  <div className="pb-2">
-                    <div className="px-4 pt-3 pb-1">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">🍽️ Plats</span>
-                    </div>
-                    {searchResults.plats.map((plat, idx) => {
-                      const globalIdx = searchResults.restaurants.length + idx;
-                      const isActive = activeIndex === globalIdx;
-                      return (
-                        <button
-                          key={plat.id}
-                          onMouseDown={() => { addToPanier(plat); setSearchQuery(''); setSearchOpen(false); }}
-                          onMouseEnter={() => setActiveIndex(globalIdx)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group ${
-                            isActive ? 'bg-orange-50' : 'hover:bg-orange-50'
-                          }`}
-                        >
-                          <img src={plat.image_url} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-gray-900 text-sm truncate">
-                              {plat.name.toLowerCase().startsWith(searchQuery.toLowerCase())
-                                ? <><span className="text-primary">{plat.name.slice(0, searchQuery.length)}</span>{plat.name.slice(searchQuery.length)}</>
-                                : plat.name
-                              }
-                            </p>
-                            <p className="text-xs text-gray-400 truncate">{plat.restaurant_name}</p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                            <span className="text-primary font-black text-sm">{plat.price.toLocaleString()} F</span>
-                            <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">+ Panier</span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                </div>
+                {/* Delivery time */}
+                <div className="col-span-2">
+                  <label className="text-[10px] font-bold text-white/60 uppercase mb-2 block">{lang === 'fr' ? 'Temps de livraison' : 'Waxtub yóbbu'}</label>
+                  <div className="flex gap-2">
+                    {[{v: 60, l: 'Tous'}, {v: 20, l: '< 20 min'}, {v: 30, l: '< 30 min'}, {v: 45, l: '< 45 min'}].map(t => (
+                      <button key={t.v} onClick={() => setFilters(f => ({...f, maxDelivery: t.v}))}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${filters.maxDelivery === t.v ? 'bg-primary text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+                        {t.l}
+                      </button>
+                    ))}
                   </div>
-                )}
-
-                {/* Footer */}
-                <div className="border-t border-gray-100 px-4 py-2 bg-gray-50 flex items-center justify-between">
-                  <button onMouseDown={() => { setSearchOpen(false); }} className="text-xs text-primary font-bold hover:underline">
-                    Voir tous les résultats pour "{searchQuery}"
-                  </button>
-                  <span className="text-[10px] text-gray-400 hidden sm:flex items-center gap-2">
-                    <kbd className="bg-white border border-gray-200 rounded px-1">↑↓</kbd> naviguer
-                    <kbd className="bg-white border border-gray-200 rounded px-1">↵</kbd> valider
-                    <kbd className="bg-white border border-gray-200 rounded px-1">Esc</kbd> fermer
-                  </span>
                 </div>
               </div>
-            )}
-          </div>
+              <div className="flex gap-3 mt-4">
+                <button onClick={() => { setFilters({ minPrice: 0, maxPrice: 50000, minRating: 0, maxDelivery: 60, diet: [], category: '' }); }} className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl text-xs hover:bg-white/20 transition-colors">
+                  {lang === 'fr' ? 'Réinitialiser' : 'Teddaat'}
+                </button>
+                <button onClick={() => setShowFilters(false)} className="flex-1 py-3 bg-primary text-white font-bold rounded-xl text-xs hover:bg-orange-600 transition-colors">
+                  {lang === 'fr' ? 'Appliquer' : 'Jëfandikoo'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -748,64 +740,12 @@ function App() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
             </div>
           </div>
-        </div>        {/* Restaurants Partenaires - Bande Défilante Auto */}
-        <div className="mt-8 mb-12">
-          <div className="flex justify-between items-end mb-6 px-2">
-            <div>
-              <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">Nos Restaurants</h2>
-              <p className="text-gray-500 font-medium mt-1">Découvrez nos partenaires</p>
-            </div>
-            <button onClick={() => setActivePage('restaurants')} className="text-primary text-sm md:text-base font-bold hover:underline bg-primary/10 px-4 py-2 rounded-xl transition-all">Voir tout</button>
-          </div>
-          {/* Marquee container */}
-          <div className="overflow-hidden -mx-6">
-            <style>{`
-              @keyframes marquee {
-                0% { transform: translateX(0); }
-                100% { transform: translateX(-50%); }
-              }
-              .marquee-track {
-                display: flex;
-                animation: marquee 28s linear infinite;
-                width: max-content;
-              }
-              .marquee-track:hover {
-                animation-play-state: paused;
-              }
-            `}</style>
-            <div className="marquee-track gap-5" style={{gap:'20px'}}>
-              {[...Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean),
-                ...Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean)
-              ].map((restName, idx) => {
-                const restPlats = plats.filter(p => p.restaurant_name === restName);
-                const firstPlat = restPlats[0];
-                return (
-                  <div
-                    key={`${restName}-${idx}`}
-                    onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }}
-                    className="flex-shrink-0 bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden cursor-pointer hover:shadow-2xl hover:scale-[1.03] transition-all duration-300 group"
-                    style={{width:'260px', marginRight:'20px'}}
-                  >
-                    <div className="h-36 w-full relative overflow-hidden">
-                      <img src={firstPlat?.image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"></div>
-                      <div className="absolute bottom-3 left-4 right-4">
-                        <span className="text-white font-black text-base line-clamp-1 drop-shadow">{restName}</span>
-                      </div>
-                    </div>
-                    <div className="px-4 py-3 flex justify-between items-center">
-                      <span className="flex items-center gap-1 text-orange-500 text-xs font-black">⭐ {firstPlat?.rating || '4.5'}</span>
-                      <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">{restPlats.length} plats</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
-        {/* Plats List */}
-        <div className="mt-8">
+
+
+        {/* Restaurants List */}
+        <div className="mt-12">
           <div className="flex justify-between items-end mb-8 px-2">
             <div>
               <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">
@@ -856,7 +796,7 @@ function App() {
                   </div>
                   <p className="text-gray-400 text-xs font-medium mb-4 line-clamp-2 leading-relaxed flex-1">{plat.description}</p>
                   <div className="flex justify-between items-center text-sm font-medium border-t border-gray-100 pt-4">
-                    <span className="text-gray-500 font-bold flex items-center gap-1">
+                    <span className="text-gray-500 font-bold flex items-center gap-1 cursor-pointer hover:text-primary transition-colors" onClick={(e) => { e.stopPropagation(); setSelectedRestaurant(plat.restaurant_name); setActivePage('restaurant-detail'); }}>
                       <Store className="w-4 h-4 text-gray-300" />
                       {plat.restaurant_name}
                     </span>
@@ -867,7 +807,7 @@ function App() {
                     className="mt-6 w-full bg-secondary hover:bg-gray-800 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg flex justify-center items-center gap-2 group/btn"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-                    Ajouter au panier
+                    {T[lang].ajouter_au_panier}
                   </button>
                 </div>
               </div>
@@ -880,20 +820,20 @@ function App() {
 
       {/* PAGE PANIER */}
       {activePage === 'panier' && (
-        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-48">
           <div className="max-w-2xl mx-auto">
           <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
-            Retour
+            {T[lang].retour}
           </button>
-          <h2 className="text-3xl font-black text-gray-900 mb-8">Mon Panier 🛒</h2>
+          <h2 className="text-3xl font-black text-gray-900 mb-8">{T[lang].mon_panier}</h2>
           {panier.length === 0 ? (
             <div className="text-center py-24">
               <div className="text-7xl mb-6">🛒</div>
-              <h3 className="text-xl font-bold text-gray-700">Votre panier est vide</h3>
-              <p className="text-gray-400 mt-2">Ajoutez des plats depuis l'onglet Explorer</p>
+              <h3 className="text-xl font-bold text-gray-700">{T[lang].panier_vide}</h3>
+              <p className="text-gray-400 mt-2">{lang === 'fr' ? "Ajoutez des plats depuis l'onglet Explorer" : "Dugal lekk yi ci Explorer"}</p>
               <button onClick={() => setActivePage('explorer')} className="mt-8 bg-primary text-white font-bold px-8 py-4 rounded-2xl hover:bg-orange-600 transition-all shadow-lg shadow-primary/30">
-                Explorer les plats
+                {T[lang].explorer_plats}
               </button>
             </div>
           ) : (
@@ -923,7 +863,7 @@ function App() {
 
               {/* Code Promo */}
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-4">
-                <h4 className="font-bold text-gray-900 mb-3">Code promo</h4>
+                <h4 className="font-bold text-gray-900 mb-3">{T[lang].code_promo}</h4>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -936,7 +876,7 @@ function App() {
                     onClick={applyPromoCode}
                     className="bg-secondary text-white font-bold px-5 py-3 rounded-xl hover:bg-gray-800 transition-colors text-sm"
                   >
-                    Appliquer
+                    {T[lang].appliquer}
                   </button>
                 </div>
                 {promoApplied && (
@@ -947,15 +887,70 @@ function App() {
                 )}
               </div>
 
+              {/* Adresse de livraison */}
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-4">
+                <h4 className="font-bold text-gray-900 mb-3">📍 Adresse de livraison</h4>
+                <AddressPicker
+                  value={deliveryAddressCustom || userAddress}
+                  onChange={(v) => setDeliveryAddressCustom(v)}
+                  onSelect={(s) => {
+                    setDeliveryAddressCustom(s.display);
+                    setDeliveryCoords({ lat: s.lat, lng: s.lng });
+                    // Recalculate delivery estimate with new coords
+                    if (panier.length > 0) {
+                      const R = 6371;
+                      const rLat = 14.6937; // Default restaurant lat (Dakar)
+                      const rLng = -17.4441;
+                      const dLat = (s.lat - rLat) * Math.PI / 180;
+                      const dLng = (s.lng - rLng) * Math.PI / 180;
+                      const a = Math.sin(dLat / 2) ** 2 + Math.cos(rLat * Math.PI / 180) * Math.cos(s.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+                      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                      const fee = Math.ceil((500 + dist * 200) / 100) * 100;
+                      setDeliveryEstimate({
+                        distance_km: Math.round(dist * 10) / 10,
+                        delivery_fee: fee,
+                        estimated_time_min: Math.round(dist * 4 + 10),
+                      });
+                    }
+                  }}
+                  userLocation={userLocation}
+                />
+                {/* Mini map preview */}
+                <div className="mt-3">
+                  <MiniMapPreview
+                    lat={deliveryCoords?.lat || userLocation?.lat || 14.6937}
+                    lng={deliveryCoords?.lng || userLocation?.lng || -17.4441}
+                    label={deliveryAddressCustom || userAddress || 'Plateau, Dakar'}
+                  />
+                </div>
+                {deliveryEstimate && (
+                  <div className="mt-3 flex items-center gap-4 text-sm">
+                    <span className="flex items-center gap-1 text-gray-500">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
+                      {deliveryEstimate.distance_km} km
+                    </span>
+                    <span className="flex items-center gap-1 text-gray-500">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                      ~{deliveryEstimate.estimated_time_min} min
+                    </span>
+                    <span className="flex items-center gap-1 font-bold text-primary">
+                      🛵 {deliveryEstimate.delivery_fee.toLocaleString()} FCFA
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Résumé de paiement */}
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-600 font-medium">Sous-total</span>
+                  <span className="text-gray-600 font-medium">{T[lang].sous_total}</span>
                   <span className="font-bold">{totalPanier.toLocaleString()} FCFA</span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-600 font-medium">Livraison</span>
-                  <span className="font-bold text-green-600">Gratuite</span>
+                  <span className="text-gray-600 font-medium">{T[lang].livraison}</span>
+                  <span className={`font-bold ${deliveryEstimate?.delivery_fee ? 'text-gray-800' : 'text-green-600'}`}>
+                    {deliveryEstimate?.delivery_fee ? `${deliveryEstimate.delivery_fee.toLocaleString()} FCFA` : T[lang].gratuite}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -968,8 +963,8 @@ function App() {
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-4 border-t border-gray-100 mb-6">
-                  <span className="text-xl font-black text-gray-900">Total</span>
-                  <span className="text-2xl font-black text-primary">{(totalPanier - promoDiscount).toLocaleString()} FCFA</span>
+                  <span className="text-xl font-black text-gray-900">{T[lang].total}</span>
+                  <span className="text-2xl font-black text-primary">{(totalPanier - promoDiscount + (deliveryEstimate?.delivery_fee || 0)).toLocaleString()} FCFA</span>
                 </div>
 
                 {/* Choix du moyen de paiement */}
@@ -1005,7 +1000,7 @@ function App() {
                   ) : (
                     <span className="text-xl">🟠</span>
                   )}
-                  {orderStatus === 'loading' ? 'Finalisation...' : `Confirmer Commande (${(totalPanier - promoDiscount).toLocaleString()} F)`}
+                  {orderStatus === 'loading' ? 'Finalisation...' : `${T[lang].confirmer} (${(totalPanier - promoDiscount + (deliveryEstimate?.delivery_fee || 0)).toLocaleString()} F)`}
                 </button>
               </div>
             </>
@@ -1020,9 +1015,9 @@ function App() {
           <div className="max-w-2xl mx-auto">
           <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
-            Retour
+            {T[lang].retour}
           </button>
-          <h2 className="text-3xl font-black text-gray-900 mb-8">Mes Commandes 📦</h2>
+          <h2 className="text-3xl font-black text-gray-900 mb-8">{T[lang].mes_commandes}</h2>
           <div className="space-y-4">
             {orders.length > 0 ? orders.map(order => (
               <div key={order.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
@@ -1058,22 +1053,79 @@ function App() {
                       className="flex-1 bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
-                      Suivre le livreur
+                      {T[lang].suivre_livreur}
                     </button>
                   )}
                   {order.status === 'livree' && (
+                    <>
                     <button
+                      onClick={() => reOrder(order)}
                       className="flex-1 bg-secondary hover:bg-gray-800 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
                     >
-                      Re-commander
+                      {T[lang].re_commander}
                     </button>
+                    <button
+                      onClick={() => { setReviewOrder(order); setReviewStars(5); setReviewText(''); setReviewPhoto(null); }}
+                      className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      ⭐ {lang === 'fr' ? 'Avis' : 'Xalaat'}
+                    </button>
+                    </>
                   )}
                 </div>
+
+                {/* Photo Review Modal */}
+                {reviewOrder?.id === order.id && (
+                  <div className="mt-4 bg-yellow-50 rounded-2xl p-5 border border-yellow-200 animate-in slide-in-from-top">
+                    <h4 className="font-black text-gray-900 text-sm mb-3">{lang === 'fr' ? 'Laisser un avis' : 'Wax sa xalaat'} ⭐</h4>
+                    <div className="flex gap-2 mb-3">
+                      {[1,2,3,4,5].map(s => (
+                        <button key={s} onClick={() => setReviewStars(s)} className={`text-2xl transition-all ${s <= reviewStars ? 'scale-110' : 'opacity-30'}`}>⭐</button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={reviewText}
+                      onChange={e => setReviewText(e.target.value)}
+                      placeholder={lang === 'fr' ? 'Partagez votre expérience...' : 'Séddal sa expérience...'}
+                      className="w-full bg-white rounded-xl p-3 text-sm border border-yellow-200 outline-none focus:ring-2 focus:ring-yellow-400 resize-none h-20"
+                    />
+                    {/* Photo upload */}
+                    <div className="flex items-center gap-3 mt-3">
+                      <label className="flex items-center gap-2 bg-white border border-yellow-200 rounded-xl px-4 py-2 cursor-pointer hover:bg-yellow-100 transition-colors">
+                        <span className="text-sm">📷</span>
+                        <span className="text-xs font-bold text-gray-600">{lang === 'fr' ? 'Ajouter photo' : 'Dugal photo'}</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={e => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setReviewPhoto(ev.target.result);
+                            reader.readAsDataURL(file);
+                          }
+                        }} />
+                      </label>
+                      {reviewPhoto && <img src={reviewPhoto} className="w-12 h-12 rounded-lg object-cover border-2 border-yellow-300" alt="preview" />}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => setReviewOrder(null)} className="flex-1 py-2 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs">{lang === 'fr' ? 'Annuler' : 'Neenal'}</button>
+                      <button onClick={async () => {
+                        try {
+                          const { ratingsAPI } = await import('./api');
+                          await ratingsAPI.create({ order_id: order.id, restaurant_id: order.restaurant_id, rating: reviewStars, comment: reviewText });
+                        } catch {}
+                        setReviewOrder(null);
+                        setOrderStatus('added');
+                        setTimeout(() => setOrderStatus(null), 2000);
+                      }} className="flex-1 py-2 bg-yellow-500 text-white font-bold rounded-xl text-xs hover:bg-yellow-600 transition-colors">
+                        {lang === 'fr' ? 'Publier' : 'Yónnee'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )) : (
               <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
                 <span className="text-5xl block mb-4">🛒</span>
-                <p className="text-gray-400 font-bold">Aucune commande pour le moment</p>
+                <p className="text-gray-400 font-bold">{T[lang].aucune_commande}</p>
               </div>
             )}
           </div>
@@ -1094,29 +1146,74 @@ function App() {
                   </div>
                   
                   <div className="flex-1 bg-gray-100 relative min-h-[300px]">
-                     {/* Google Map Implementation here */}
-                     <iframe 
-                       width="100%" 
-                       height="100%" 
-                       style={{ border: 0 }} 
-                       loading="lazy" 
-                       allowFullScreen 
-                       src={`https://www.google.com/maps/embed/v1/place?key=VOTRE_GOOGLE_MAPS_API_KEY&q=${courierLoc?.lat},${courierLoc?.lng}&zoom=15`}
-                     ></iframe>
-                     
-                     <div className="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur-md rounded-3xl p-5 shadow-xl border border-white/50 flex items-center gap-4">
+                     <LiveTrackingMap
+                       courierLat={courierLoc?.lat || 14.6937}
+                       courierLng={courierLoc?.lng || -17.4441}
+                       clientLat={userLocation?.lat || 14.7445}
+                       clientLng={userLocation?.lng || -17.5134}
+                       restaurantLat={trackingOrder?.restaurant_lat || 14.6928}
+                       restaurantLng={trackingOrder?.restaurant_lng || -17.4660}
+                     />
+
+                     <div className="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur-md rounded-3xl p-5 shadow-xl border border-white/50 flex items-center gap-4 z-[500]">
                         <div className="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center">
                            <span className="text-2xl">🏍️</span>
                         </div>
                         <div className="flex-1">
                            <p className="text-[10px] font-black text-primary uppercase tracking-widest">Livreur en approche</p>
-                           <h4 className="font-black text-gray-900">Moussa Diop</h4>
-                           <p className="text-xs text-gray-500 font-medium">Estimé : 5-8 minutes</p>
+                           <h4 className="font-black text-gray-900">{trackingOrder?.courier_name || 'Livreur'}</h4>
+                           <p className="text-xs text-gray-500 font-medium">
+                             {courierLoc ? `Position : ${courierLoc.lat.toFixed(4)}, ${courierLoc.lng.toFixed(4)}` : 'Localisation...'}
+                           </p>
                         </div>
-                        <a href="tel:770000000" className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/30">
+                        <button onClick={() => setChatOpen(!chatOpen)} className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">
+                           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                        </button>
+                        <a href={`tel:${trackingOrder?.courier_phone || '770000000'}`} className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/30">
                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
                         </a>
                      </div>
+
+                     {/* CHAT PANEL */}
+                     {chatOpen && (
+                       <div className="absolute top-16 right-4 bottom-24 w-[85%] max-w-sm bg-white rounded-3xl shadow-2xl border border-gray-100 z-[600] flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
+                         <div className="p-4 border-b bg-primary text-white flex justify-between items-center rounded-t-3xl">
+                           <h4 className="font-black text-sm">{T[lang].chat_livreur} 💬</h4>
+                           <button onClick={() => setChatOpen(false)} className="w-7 h-7 bg-white/20 rounded-full flex items-center justify-center">
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                           </button>
+                         </div>
+                         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-neutral-50">
+                           {chatMessages.length === 0 && (
+                             <p className="text-gray-400 text-xs text-center py-8">{lang === 'fr' ? 'Envoyez un message au livreur' : 'Yónneel bataaxal livreur bi'}</p>
+                           )}
+                           {chatMessages.map(msg => (
+                             <div key={msg.id} className={`flex ${msg.sender === 'client' ? 'justify-end' : 'justify-start'}`}>
+                               <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm ${msg.sender === 'client' ? 'bg-primary text-white rounded-br-md' : 'bg-white text-gray-800 border border-gray-100 rounded-bl-md shadow-sm'}`}>
+                                 <p className="font-medium">{msg.text}</p>
+                                 <p className={`text-[10px] mt-1 ${msg.sender === 'client' ? 'text-white/60' : 'text-gray-400'}`}>{msg.time}</p>
+                               </div>
+                             </div>
+                           ))}
+                         </div>
+                         <div className="p-3 border-t bg-white flex gap-2">
+                           <input
+                             type="text"
+                             value={chatInput}
+                             onChange={e => setChatInput(e.target.value)}
+                             onKeyDown={e => e.key === 'Enter' && sendChatMessage(chatInput)}
+                             placeholder={lang === 'fr' ? 'Votre message...' : 'Sa bataaxal...'}
+                             className="flex-1 bg-neutral-50 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+                           />
+                           <button
+                             onClick={() => sendChatMessage(chatInput)}
+                             className="bg-primary text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-orange-600 transition-colors"
+                           >
+                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                           </button>
+                         </div>
+                       </div>
+                     )}
                   </div>
                </div>
             </div>
@@ -1130,7 +1227,7 @@ function App() {
           <div className="max-w-md mx-auto">
           <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
-            Retour
+            {T[lang].retour}
           </button>
 
           {!user ? (
@@ -1184,12 +1281,21 @@ function App() {
 
               <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
                 {[
-                  { icon:'📍', label:'Adresses', value:'Gérer mes adresses' },
-                  { icon:'💳', label:'Paiements', value:'Wave par défaut' },
-                  { icon:'🎁', label:'Parrainage', value:'Gagnez 5 000 FCFA' },
-                  { icon:'⚙️', label:'Paramètres', value:'Notifications, Sécurité' },
+                  { icon:'📍', label: T[lang].mes_adresses, value: lang === 'fr' ? 'Gérer mes adresses' : 'Saytu sama adresses' },
+                  { icon:'💰', label: T[lang].portefeuille, value: lang === 'fr' ? 'Solde & transactions' : 'Sold ak transactions' , page:'wallet' },
+                  { icon:'🏆', label: T[lang].defis, value: 'Gamification', page:'gamification' },
+                  { icon:'🎁', label:'Cartes Cadeau', value:'Offrir ou utiliser', page:'giftcards' },
+                  { icon:'📅', label:'Abonnements', value:'Forfaits repas', page:'subscriptions' },
+                  { icon:'🍽️', label:'Traiteur', value:'Événements & groupes', page:'catering' },
+                  { icon:'🎫', label:'Parrainage', value:'Gagnez 5 000 FCFA' },
+                  { icon:'👥', label: lang === 'fr' ? 'Commande Groupée' : 'Commande Mbooloo', value: lang === 'fr' ? 'Commander à plusieurs' : 'Commande ak mbooloo', page:'group-order' },
+                  { icon:'🗓️', label: lang === 'fr' ? 'Planning Repas' : 'Planning Lekk', value: lang === 'fr' ? 'Planifiez votre semaine' : 'Planifié sa ayu-bis', page:'meal-plan' },
+                  { icon:'🎮', label: T[lang].mini_jeux, value: lang === 'fr' ? 'Roue, Scratch & prix' : 'Roue, Scratch ak prix', page:'jeux' },
+                  { icon:'📞', label: T[lang].support, value: lang === 'fr' ? 'Aide & réclamations' : 'Ndimbal & réclamations', page:'support' },
+                  { icon:'🔔', label: lang === 'fr' ? 'Notifications' : 'Notifications yi', value: unreadNotifs > 0 ? `${unreadNotifs} non lues` : (lang === 'fr' ? 'À jour' : 'Neex na'), page:'notifications' },
+                  { icon:'⚙️', label: lang === 'fr' ? 'Paramètres' : 'Paramètres yi', value: lang === 'fr' ? 'Notifications, Sécurité' : 'Notifications, Kaarange' },
                 ].map((item, i) => (
-                  <div key={i} className="flex items-center px-6 py-5 hover:bg-neutral-50 cursor-pointer transition-colors">
+                  <div key={i} onClick={() => item.page && setActivePage(item.page)} className="flex items-center px-6 py-5 hover:bg-neutral-50 cursor-pointer transition-colors">
                     <span className="text-2xl mr-4">{item.icon}</span>
                     <div className="flex-1">
                       <p className="text-xs text-gray-400 font-bold uppercase tracking-tighter mb-0.5">{item.label}</p>
@@ -1200,16 +1306,141 @@ function App() {
                 ))}
               </div>
 
-              <button 
-                onClick={() => { 
-                  localStorage.removeItem('token'); 
-                  localStorage.removeItem('user'); 
-                  setUser(null); setToken(null); 
+              {/* DARK MODE TOGGLE */}
+              <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{darkMode ? '🌙' : '☀️'}</span>
+                  <div>
+                    <p className="font-bold text-gray-800 text-sm">{T[lang].mode_sombre}</p>
+                    <p className="text-xs text-gray-400">{darkMode ? (lang === 'fr' ? 'Activé' : 'Dafa dox') : (lang === 'fr' ? 'Désactivé' : 'Tëdduwul')}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`relative w-14 h-8 rounded-full transition-colors duration-300 ${darkMode ? 'bg-primary' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${darkMode ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                </button>
+              </div>
+
+              {/* LANGUAGE SWITCHER */}
+              <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-2xl">🌍</span>
+                  <p className="font-bold text-gray-800 text-sm">{T[lang].langue}</p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setLang('fr')}
+                    className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${lang === 'fr' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    <span className="text-lg">🇫🇷</span> FR
+                  </button>
+                  <button
+                    onClick={() => setLang('wo')}
+                    className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${lang === 'wo' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    <span className="text-lg">🇸🇳</span> Wolof
+                  </button>
+                </div>
+              </div>
+
+              {/* SAVED ADDRESSES */}
+              <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6">
+                <h4 className="font-black text-gray-900 text-lg mb-4">{T[lang].mes_adresses}</h4>
+                <div className="space-y-3">
+                  {savedAddresses.map(addr => (
+                    <div key={addr.id} className="flex items-center gap-3 p-3 bg-neutral-50 rounded-2xl">
+                      <span className="text-2xl">{addr.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-gray-800 text-sm">{addr.label}</p>
+                        <p className="text-xs text-gray-400 truncate">{addr.address}</p>
+                      </div>
+                      <button onClick={() => setSavedAddresses(prev => prev.filter(a => a.id !== addr.id))} className="text-red-400 hover:text-red-600 p-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {!showAddressForm ? (
+                  <button onClick={() => setShowAddressForm(true)} className="w-full mt-4 py-3 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-primary hover:text-primary transition-colors">
+                    + {T[lang].ajouter_adresse}
+                  </button>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <input
+                      type="text"
+                      value={newAddressLabel}
+                      onChange={e => setNewAddressLabel(e.target.value)}
+                      placeholder={lang === 'fr' ? 'Nom (ex: Maison, Bureau...)' : 'Tur bi (ex: Kër, Bureau...)'}
+                      className="w-full bg-neutral-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary outline-none"
+                    />
+                    <AddressPicker
+                      value=""
+                      onChange={() => {}}
+                      onSelect={(s) => {
+                        if (newAddressLabel.trim()) {
+                          const icons = ['🏠', '💼', '🏫', '🏥', '🏪', '📍'];
+                          setSavedAddresses(prev => [...prev, {
+                            id: Date.now(),
+                            label: newAddressLabel.trim(),
+                            icon: icons[prev.length % icons.length],
+                            address: s.display,
+                            lat: s.lat,
+                            lng: s.lng,
+                          }]);
+                          setNewAddressLabel('');
+                          setShowAddressForm(false);
+                        }
+                      }}
+                      userLocation={userLocation}
+                    />
+                    <button onClick={() => { setShowAddressForm(false); setNewAddressLabel(''); }} className="text-gray-400 text-xs font-bold hover:text-gray-600">
+                      {lang === 'fr' ? 'Annuler' : 'Neenal'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* REFERRAL SECTION */}
+              <div className="bg-gradient-to-br from-primary/10 to-orange-50 rounded-[32px] border border-primary/20 p-6">
+                <h4 className="font-black text-gray-900 text-lg mb-2">{T[lang].parrainage}</h4>
+                <p className="text-xs text-gray-500 mb-4">{lang === 'fr' ? 'Partagez votre code et gagnez 5 000 FCFA par filleul !' : 'Séddal sa code te mënël 5 000 FCFA !'}</p>
+                <div className="bg-white rounded-2xl p-4 flex items-center justify-between mb-4">
+                  <span className="font-black text-xl text-primary tracking-wider">{referralCode}</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(referralCode);
+                      setReferralCopied(true);
+                      setTimeout(() => setReferralCopied(false), 2000);
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${referralCopied ? 'bg-green-500 text-white' : 'bg-primary text-white hover:bg-orange-600'}`}
+                  >
+                    {referralCopied ? T[lang].code_copie : T[lang].copier_code}
+                  </button>
+                </div>
+                <div className="flex gap-4">
+                  <div className="flex-1 bg-white rounded-2xl p-3 text-center">
+                    <p className="text-2xl font-black text-primary">3</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase">{lang === 'fr' ? 'Filleuls' : 'Filleuls yi'}</p>
+                  </div>
+                  <div className="flex-1 bg-white rounded-2xl p-3 text-center">
+                    <p className="text-2xl font-black text-green-500">15 000</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase">{lang === 'fr' ? 'FCFA gagnés' : 'FCFA mënël'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                  setUser(null); setToken(null);
                   setActivePage('explorer');
                 }}
                 className="w-full py-5 text-red-500 font-black text-sm uppercase tracking-widest hover:bg-red-50 rounded-3xl transition-colors"
               >
-                Déconnexion
+                {T[lang].deconnexion}
               </button>
             </div>
             </>
@@ -1218,39 +1449,218 @@ function App() {
         </main>
       )}
 
-      {/* PAGE CARTE (GEOLOCALISATION) */}
-      {activePage === 'carte' && (
-        <main className="h-screen w-full relative pb-20">
-          <div className="absolute top-6 left-6 right-6 z-[400] bg-white/90 backdrop-blur-xl shadow-xl rounded-2xl p-4 border border-gray-100 flex items-center gap-4">
-             <div className="bg-primary/10 p-3 rounded-xl text-primary">📍</div>
-             <div>
-               <h3 className="font-black text-gray-900 leading-tight">Carte des Restaurants</h3>
-               <p className="text-xs font-bold text-gray-500">Trouvez les meilleures adresses autour de vous</p>
-             </div>
+      {/* PAGE PORTEFEUILLE */}
+      {activePage === 'wallet' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <WalletPage user={user} />
           </div>
-          <MapContainer center={[14.693, -17.473]} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            />
-            <LocationMarker />
-            {Object.entries(RESTAURANTS_DATA).map(([name, data]) => (
-              <Marker key={name} position={[data.lat, data.lng]}>
-                <Popup className="rounded-2xl">
-                  <div className="text-center p-1">
-                    <h4 className="font-black text-gray-900 text-sm mb-1">{name}</h4>
-                    <p className="text-xs text-gray-500 mb-2">{data.desc}</p>
-                    <button 
-                      onClick={() => { setSelectedRestaurant(name); setActivePage('restaurant-detail'); }}
-                      className="bg-primary text-white text-[10px] font-black px-3 py-1.5 rounded-lg w-full"
+        </main>
+      )}
+
+      {/* PAGE GAMIFICATION */}
+      {activePage === 'gamification' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <GamificationPage user={user} />
+          </div>
+        </main>
+      )}
+
+      {/* PAGE CARTES CADEAU */}
+      {activePage === 'giftcards' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <GiftCardsPage user={user} />
+          </div>
+        </main>
+      )}
+
+      {/* PAGE ABONNEMENTS */}
+      {activePage === 'subscriptions' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <SubscriptionsPage user={user} />
+          </div>
+        </main>
+      )}
+
+      {/* PAGE TRAITEUR */}
+      {activePage === 'catering' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <CateringPage user={user} />
+          </div>
+        </main>
+      )}
+
+      {/* PAGE SUPPORT */}
+      {activePage === 'support' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <SupportPage user={user} />
+          </div>
+        </main>
+      )}
+
+      {/* PAGE MINI-JEUX */}
+      {activePage === 'jeux' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <h2 className="text-3xl font-black text-gray-900 mb-8">{T[lang].mini_jeux}</h2>
+
+            {/* FORTUNE WHEEL */}
+            <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6 mb-6">
+              <h3 className="font-black text-gray-900 text-lg mb-4">{T[lang].roue_fortune} 🎡</h3>
+              <div className="relative w-64 h-64 mx-auto mb-6">
+                {/* Wheel */}
+                <div
+                  className="w-full h-full rounded-full border-4 border-primary/30 overflow-hidden relative"
+                  style={{
+                    transform: `rotate(${wheelRotation}deg)`,
+                    transition: wheelSpinning ? 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)' : 'none',
+                  }}
+                >
+                  {['500F', '100F', 'Livr.', '200F', 'Dessert', '50F', '1000F', 'Rien'].map((prize, i) => (
+                    <div
+                      key={i}
+                      className="absolute w-full h-full"
+                      style={{ transform: `rotate(${i * 45}deg)` }}
                     >
-                      Voir le Menu
-                    </button>
+                      <div
+                        className="absolute top-0 left-1/2 -translate-x-1/2 text-[10px] font-black pt-3 text-center"
+                        style={{ color: i % 2 === 0 ? '#f97316' : '#1e293b', width: '60px' }}
+                      >
+                        {prize}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Wheel segments background */}
+                  <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full -z-10">
+                    {[0,1,2,3,4,5,6,7].map(i => {
+                      const startAngle = i * 45 * Math.PI / 180;
+                      const endAngle = (i + 1) * 45 * Math.PI / 180;
+                      const x1 = 100 + 100 * Math.cos(startAngle);
+                      const y1 = 100 + 100 * Math.sin(startAngle);
+                      const x2 = 100 + 100 * Math.cos(endAngle);
+                      const y2 = 100 + 100 * Math.sin(endAngle);
+                      return (
+                        <path
+                          key={i}
+                          d={`M100,100 L${x1},${y1} A100,100 0 0,1 ${x2},${y2} Z`}
+                          fill={i % 2 === 0 ? '#fff7ed' : '#f1f5f9'}
+                          stroke="#e2e8f0"
+                          strokeWidth="0.5"
+                        />
+                      );
+                    })}
+                  </svg>
+                </div>
+                {/* Pointer */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-10">
+                  <div className="w-0 h-0 border-l-[12px] border-r-[12px] border-t-[20px] border-l-transparent border-r-transparent border-t-primary drop-shadow-lg"></div>
+                </div>
+              </div>
+              <button
+                onClick={spinWheel}
+                disabled={wheelSpinning}
+                className="w-full bg-primary hover:bg-orange-600 disabled:opacity-60 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg shadow-primary/30"
+              >
+                {wheelSpinning ? '🎡 ...' : T[lang].tourner}
+              </button>
+              {wheelResult && (
+                <div className={`mt-4 text-center p-4 rounded-2xl font-black text-lg ${wheelResult === 'Rien' ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-600 animate-bounce'}`}>
+                  {wheelResult === 'Rien' ? (lang === 'fr' ? 'Pas de chance ! Réessayez 😅' : 'Amul chance ! Jéemaat 😅') : `🎉 ${wheelResult}`}
+                </div>
+              )}
+            </div>
+
+            {/* SCRATCH CARD */}
+            <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6 mb-6">
+              <h3 className="font-black text-gray-900 text-lg mb-4">{T[lang].carte_gratter} 🎫</h3>
+              <div
+                onClick={revealScratch}
+                className={`relative w-full h-40 rounded-3xl cursor-pointer overflow-hidden transition-all duration-700 ${scratchRevealed ? 'scale-105' : 'hover:scale-[1.02]'}`}
+              >
+                {!scratchRevealed ? (
+                  <div className="w-full h-full bg-gradient-to-br from-gray-300 via-gray-400 to-gray-300 flex items-center justify-center">
+                    <div className="text-center">
+                      <span className="text-4xl block mb-2">🎫</span>
+                      <p className="text-white font-black text-sm uppercase tracking-widest">{T[lang].gratter}</p>
+                    </div>
+                    {/* Scratch texture overlay */}
+                    <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)' }}></div>
                   </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+                ) : (
+                  <div className={`w-full h-full flex items-center justify-center ${scratchPrize === 'Rien' ? 'bg-gray-100' : 'bg-gradient-to-br from-yellow-100 via-orange-50 to-yellow-100'}`}>
+                    <div className="text-center animate-in zoom-in duration-500">
+                      <span className="text-5xl block mb-2">{scratchPrize === 'Rien' ? '😅' : '🎉'}</span>
+                      <p className={`font-black text-2xl ${scratchPrize === 'Rien' ? 'text-gray-400' : 'text-primary'}`}>{scratchPrize}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {scratchRevealed && (
+                <button
+                  onClick={() => { setScratchRevealed(false); setScratchPrize(null); }}
+                  className="w-full mt-4 py-3 bg-secondary text-white font-bold rounded-2xl text-sm hover:bg-gray-800 transition-colors"
+                >
+                  {lang === 'fr' ? 'Nouvelle carte' : 'Carte bu bees'}
+                </button>
+              )}
+            </div>
+
+            {/* PRIZE HISTORY */}
+            <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6">
+              <h3 className="font-black text-gray-900 text-lg mb-4">{T[lang].historique_gains} 🏆</h3>
+              {prizeHistory.length > 0 ? (
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {prizeHistory.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-neutral-50 rounded-2xl">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{p.type === 'roue' ? '🎡' : '🎫'}</span>
+                        <div>
+                          <p className="font-bold text-gray-800 text-sm">{p.prize}</p>
+                          <p className="text-[10px] text-gray-400">{p.date}</p>
+                        </div>
+                      </div>
+                      <span className="text-green-500 text-xs font-bold">+1</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm text-center py-8">{lang === 'fr' ? 'Aucun gain pour le moment' : 'Amul gain ba leegi'}</p>
+              )}
+            </div>
+          </div>
         </main>
       )}
 
@@ -1258,7 +1668,7 @@ function App() {
       {activePage === 'restaurants' && (
         <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
           <div className="max-w-2xl mx-auto">
-            <h2 className="text-3xl font-black text-gray-900 mb-6 tracking-tight">Restaurants 🏪</h2>
+            <h2 className="text-3xl font-black text-gray-900 mb-6 tracking-tight">{T[lang].restaurants} 🏪</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {Array.from(new Set(plats.map(p => p.restaurant_name))).filter(Boolean).map(restName => {
                  const restPlats = plats.filter(p => p.restaurant_name === restName);
@@ -1266,15 +1676,16 @@ function App() {
                  return (
                    <div key={restName} onClick={() => { setSelectedRestaurant(restName); setActivePage('restaurant-detail'); }} className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden cursor-pointer hover:shadow-xl transition-all group">
                      <div className="h-40 w-full relative overflow-hidden">
-                       <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+                       <img src={firstPlat?.image_url} alt={restName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                       <div className="absolute bottom-4 left-4 right-4">
-                         <h3 className="text-white font-black text-xl line-clamp-1 m-0">{restName}</h3>
+                       <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                         <span className="text-white font-black text-xl line-clamp-1">{restName}</span>
+                         <span className="bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg text-white text-[10px] font-bold">20-30 min</span>
                        </div>
                      </div>
                      <div className="p-4 flex justify-between items-center bg-white">
-                       <span className="flex items-center gap-1 bg-orange-50 text-orange-600 px-3 py-1 rounded-xl text-sm font-black">⭐ {firstPlat?.rating || '4.5'}</span>
-                       <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">{restPlats.length} plats</span>
+                       <span className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full text-xs font-bold text-gray-700">⭐ {firstPlat?.rating || '4.5'}</span>
+                       <span className="text-sm font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{restPlats.length} {lang === 'fr' ? 'plats' : 'lekk yi'}</span>
                      </div>
                    </div>
                  );
@@ -1288,49 +1699,60 @@ function App() {
       {activePage === 'restaurant-detail' && selectedRestaurant && (
         <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
           <div className="max-w-2xl mx-auto">
-            <button onClick={() => setActivePage('restaurants')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+            <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
-              Retour
+              {T[lang].retour}
             </button>
+            {/* Restaurant Header */}
             <div className="bg-gradient-to-br from-secondary to-gray-900 rounded-[32px] p-8 text-white shadow-2xl mb-8 relative overflow-hidden">
               <div className="absolute inset-0 opacity-20">
                 <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80" className="w-full h-full object-cover" alt="" />
               </div>
               <div className="relative z-10">
-                <span className="bg-primary/90 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase">Restaurant</span>
+                <span className="bg-primary/90 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase">{lang === 'fr' ? 'Restaurant' : 'Restoraan'}</span>
                 <h2 className="text-3xl font-black mt-3">{selectedRestaurant}</h2>
-                <div className="flex items-center gap-4 mt-4 mb-6">
+                <div className="flex items-center gap-4 mt-4">
                   <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">⭐ 4.8</span>
                   <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">🕐 20-35 min</span>
+                  <span className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">📍 2.3 km</span>
                 </div>
-                {RESTAURANTS_DATA[selectedRestaurant] && (
-                  <div className="h-40 rounded-2xl overflow-hidden border-4 border-white/10 shadow-inner mt-4 relative z-20">
-                    <MapContainer 
-                      center={[RESTAURANTS_DATA[selectedRestaurant].lat, RESTAURANTS_DATA[selectedRestaurant].lng]} 
-                      zoom={15} 
-                      style={{ height: '100%', width: '100%' }}
-                      zoomControl={false}
-                      dragging={false}
-                      scrollWheelZoom={false}
-                    >
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      <Marker position={[RESTAURANTS_DATA[selectedRestaurant].lat, RESTAURANTS_DATA[selectedRestaurant].lng]} />
-                    </MapContainer>
-                  </div>
-                )}
+                <p className="text-white/60 text-sm mt-3">{lang === 'fr' ? 'Cuisine sénégalaise authentique, plats faits maison' : 'Lekk bu sénégalais bu dëgg, lekk bu defar ca kër'}</p>
               </div>
             </div>
-            <h3 className="text-xl font-black text-gray-900 mb-4">Menu 🍽️</h3>
+            {/* Mini Map */}
+            <div className="mb-8">
+              <MiniMapPreview lat={14.6937} lng={-17.4441} label={selectedRestaurant} />
+            </div>
+            {/* Info cards */}
+            <div className="grid grid-cols-3 gap-3 mb-8">
+              <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
+                <span className="text-2xl">🕐</span>
+                <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{lang === 'fr' ? 'Horaires' : 'Waxtu yi'}</p>
+                <p className="text-xs font-black text-gray-800">8h - 23h</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
+                <span className="text-2xl">📞</span>
+                <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{lang === 'fr' ? 'Téléphone' : 'Telefon'}</p>
+                <p className="text-xs font-black text-gray-800">77 123 45 67</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
+                <span className="text-2xl">🏍️</span>
+                <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{lang === 'fr' ? 'Livraison' : 'Yóbbu'}</p>
+                <p className="text-xs font-black text-primary">500 FCFA</p>
+              </div>
+            </div>
+            {/* Menu */}
+            <h3 className="text-xl font-black text-gray-900 mb-4">{lang === 'fr' ? 'Menu' : 'Menu bi'} 🍽️</h3>
             <div className="space-y-4">
               {plats.filter(p => p.restaurant_name === selectedRestaurant).map(plat => (
-                <div key={plat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex gap-4 items-center cursor-pointer" onClick={() => addToPanier(plat)}>
+                <div key={plat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex gap-4 items-center">
                   <img src={plat.image_url} alt={plat.name} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" loading="lazy" />
                   <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-gray-900 text-sm">{plat.name}</h4>
                     <p className="text-xs text-gray-400 line-clamp-1">{plat.description}</p>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-primary font-black">{plat.price.toLocaleString()} FCFA</span>
-                      <button className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-orange-600 transition-colors">+</button>
+                      <button onClick={() => addToPanier(plat)} className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-orange-600 transition-colors">+</button>
                     </div>
                   </div>
                 </div>
@@ -1340,254 +1762,208 @@ function App() {
         </main>
       )}
 
-      {/* ============================================================
-          PAGE LIVRAISONS
-      ============================================================ */}
-      {activePage === 'livraisons' && (
-        <main className="min-h-screen bg-neutral-50 pb-32">
-          {/* Tabs Livraisons */}
-          <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
-            <div className="max-w-2xl mx-auto px-6 pt-6 pb-0">
-              <h2 className="text-2xl font-black text-gray-900 mb-4">Livraisons 🛵</h2>
-              <div className="flex gap-4">
-                {['suivi', 'livreurs', 'tarifs'].map(t => (
-                  <button key={t} onClick={() => setSelectedLivreur(t)}
-                    className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${
-                      selectedLivreur === t ? 'border-primary text-primary' : 'border-transparent text-gray-400'
-                    }`}>
-                    {t === 'suivi' ? '📍 Suivi' : t === 'livreurs' ? '🛵 Livreurs' : '💰 Tarifs'}
+      {/* PAGE NOTIFICATIONS */}
+      {activePage === 'notifications' && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('explorer')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <h2 className="text-3xl font-black text-gray-900 mb-2">{lang === 'fr' ? 'Notifications' : 'Notifications yi'} 🔔</h2>
+            {/* Push permission */}
+            {'Notification' in window && Notification.permission !== 'granted' && (
+              <button
+                onClick={() => Notification.requestPermission().then(p => { if (p === 'granted') { new Notification('SenFood', { body: 'Notifications activées ! 🎉' }); } })}
+                className="w-full mb-6 py-4 bg-gradient-to-r from-primary to-orange-600 text-white font-bold rounded-2xl text-sm shadow-lg shadow-primary/30 hover:shadow-xl transition-all"
+              >
+                {lang === 'fr' ? '🔔 Activer les notifications push' : '🔔 Dëggal notifications push'}
+              </button>
+            )}
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-xs text-gray-400 font-bold">{notifications.length} notifications</span>
+              <button onClick={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} className="text-xs text-primary font-bold hover:underline">
+                {lang === 'fr' ? 'Tout marquer lu' : 'Tolaal lu'}
+              </button>
+            </div>
+            <div className="space-y-3">
+              {notifications.map(notif => (
+                <div key={notif.id} onClick={() => setNotifications(prev => prev.map(n => n.id === notif.id ? {...n, read: true} : n))}
+                  className={`bg-white rounded-2xl p-5 shadow-sm border transition-all cursor-pointer ${notif.read ? 'border-gray-100 opacity-70' : 'border-primary/30 shadow-primary/10'}`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">{notif.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-gray-900 text-sm">{notif.title}</h4>
+                        {!notif.read && <span className="w-2.5 h-2.5 bg-primary rounded-full flex-shrink-0"></span>}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">{notif.body}</p>
+                      <p className="text-[10px] text-gray-300 font-bold mt-2">{notif.time}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* PAGE GROUP ORDER */}
+      {activePage === 'group-order' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <h2 className="text-3xl font-black text-gray-900 mb-8">{lang === 'fr' ? 'Commande Groupée' : 'Commande Mbooloo'} 👥</h2>
+
+            {!groupOrderCode ? (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[32px] p-8 text-white shadow-2xl text-center">
+                  <span className="text-5xl block mb-4">👥</span>
+                  <h3 className="text-xl font-black mb-2">{lang === 'fr' ? 'Commandez à plusieurs !' : 'Commandez ak mbooloo !'}</h3>
+                  <p className="text-white/70 text-sm mb-6">{lang === 'fr' ? 'Partagez un lien, chacun choisit son plat, payez ensemble ou séparément.' : 'Séddal lien bi, ku nekk tànn lekk bum, fey ñépp walla seneen.'}</p>
+                  <button
+                    onClick={() => {
+                      const code = `GRP${Date.now().toString(36).toUpperCase()}`;
+                      setGroupOrderCode(code);
+                      setGroupParticipants([{ name: user.name, items: [...panier], paid: false }]);
+                    }}
+                    className="bg-white text-blue-600 font-black py-4 px-8 rounded-2xl text-sm hover:bg-gray-100 transition-all shadow-lg"
+                  >
+                    {lang === 'fr' ? 'Créer une commande groupée' : 'Sos commande mbooloo'}
                   </button>
-                ))}
+                </div>
+                <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6">
+                  <h4 className="font-bold text-gray-800 text-sm mb-3">{lang === 'fr' ? 'Comment ça marche ?' : 'Nan la def ?'}</h4>
+                  <div className="space-y-3">
+                    {[
+                      { step: '1', text: lang === 'fr' ? 'Créez une commande groupée' : 'Sos commande mbooloo' },
+                      { step: '2', text: lang === 'fr' ? 'Partagez le code avec vos amis' : 'Séddal code bi ak say xarit' },
+                      { step: '3', text: lang === 'fr' ? 'Chacun ajoute ses plats' : 'Ku nekk dugal lekk bum' },
+                      { step: '4', text: lang === 'fr' ? 'Finalisez et payez' : 'Jeexal te fey' },
+                    ].map(s => (
+                      <div key={s.step} className="flex items-center gap-3">
+                        <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-black">{s.step}</span>
+                        <span className="text-sm text-gray-600 font-medium">{s.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Share code */}
+                <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6">
+                  <p className="text-xs text-gray-400 font-bold uppercase mb-2">{lang === 'fr' ? 'Code de partage' : 'Code séddal'}</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-black text-blue-600 tracking-wider flex-1">{groupOrderCode}</span>
+                    <button onClick={() => { navigator.clipboard?.writeText(groupOrderCode); }} className="bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors">
+                      {lang === 'fr' ? 'Copier' : 'Copier'}
+                    </button>
+                  </div>
+                </div>
+                {/* Participants */}
+                <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-6">
+                  <h4 className="font-black text-gray-900 text-lg mb-4">{lang === 'fr' ? 'Participants' : 'Participants yi'} ({groupParticipants.length})</h4>
+                  <div className="space-y-3">
+                    {groupParticipants.map((p, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 bg-neutral-50 rounded-2xl">
+                        <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=3b82f6&color=fff`} className="w-10 h-10 rounded-full" alt="" />
+                        <div className="flex-1">
+                          <p className="font-bold text-gray-800 text-sm">{p.name}</p>
+                          <p className="text-xs text-gray-400">{p.items.length} {lang === 'fr' ? 'articles' : 'articles'}</p>
+                        </div>
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${p.paid ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                          {p.paid ? '✓ Payé' : 'En attente'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => { setGroupOrderCode(null); setGroupParticipants([]); }} className="w-full py-4 bg-secondary text-white font-black rounded-2xl text-sm hover:bg-gray-800 transition-colors shadow-lg">
+                  {lang === 'fr' ? 'Finaliser la commande' : 'Jeexal commande bi'}
+                </button>
+              </div>
+            )}
+          </div>
+        </main>
+      )}
+
+      {/* PAGE MEAL PLAN */}
+      {activePage === 'meal-plan' && user && (
+        <main className="min-h-screen bg-neutral-50 px-6 pt-6 pb-32">
+          <div className="max-w-md mx-auto">
+            <button onClick={() => setActivePage('profil')} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold mb-6 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+              {T[lang].retour}
+            </button>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-3xl font-black text-gray-900">{lang === 'fr' ? 'Planning Repas' : 'Planning Lekk'} 🗓️</h2>
+              <button onClick={() => setMealPlanActive(!mealPlanActive)}
+                className={`relative w-14 h-8 rounded-full transition-colors duration-300 ${mealPlanActive ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${mealPlanActive ? 'translate-x-7' : 'translate-x-1'}`}></div>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {Object.entries(mealPlan).map(([day, meals]) => (
+                <div key={day} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-black text-gray-900">{day}</h4>
+                    <button onClick={() => setMealPlanDay(day)} className="text-primary text-xs font-bold bg-primary/10 px-3 py-1 rounded-full hover:bg-primary/20 transition-colors">
+                      + {lang === 'fr' ? 'Ajouter' : 'Dugal'}
+                    </button>
+                  </div>
+                  {meals.length > 0 ? (
+                    <div className="space-y-2">
+                      {meals.map((m, i) => (
+                        <div key={i} className="flex items-center gap-3 p-2 bg-neutral-50 rounded-xl">
+                          <img src={m.image_url} alt="" className="w-10 h-10 rounded-lg object-cover" loading="lazy" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-800 truncate">{m.name}</p>
+                            <p className="text-[10px] text-gray-400">{m.price.toLocaleString()} FCFA</p>
+                          </div>
+                          <button onClick={() => setMealPlan(prev => ({...prev, [day]: prev[day].filter((_, j) => j !== i)}))} className="text-red-400 text-xs">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-300 italic">{lang === 'fr' ? 'Aucun repas planifié' : 'Amul lekk bu planifié'}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Total */}
+            <div className="bg-gradient-to-r from-primary to-orange-600 rounded-2xl p-5 mt-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm">{lang === 'fr' ? 'Budget hebdomadaire' : 'Budget ayu-bis'}</span>
+                <span className="text-2xl font-black">{Object.values(mealPlan).flat().reduce((acc, m) => acc + m.price, 0).toLocaleString()} FCFA</span>
               </div>
             </div>
           </div>
 
-          {/* --- ONGLET SUIVI --- */}
-          {(selectedLivreur === 'suivi' || !selectedLivreur) && (
-            <div className="max-w-2xl mx-auto px-6 pt-6">
-              {activeLivraison ? (
-                <>
-                  {/* Statuts */}
-                  <div className="flex items-center justify-between mb-6">
-                    {['⏳ Préparation', '🛵 En route', '✅ Livré'].map((s, i) => (
-                      <div key={i} className={`flex flex-col items-center gap-1 ${
-                        i <= livraisonStep ? 'opacity-100' : 'opacity-30'
-                      }`}>
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-black border-2 ${
-                          i < livraisonStep ? 'bg-green-500 border-green-500 text-white' :
-                          i === livraisonStep ? 'bg-primary border-primary text-white animate-pulse' :
-                          'bg-white border-gray-200'
-                        }`}>{i + 1}</div>
-                        <span className="text-[9px] font-bold text-center leading-tight max-w-[60px]">{s}</span>
+          {/* Meal selection modal */}
+          {mealPlanDay && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setMealPlanDay(null)}>
+              <div className="bg-white rounded-t-[40px] w-full max-h-[70vh] overflow-y-auto p-6 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
+                <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+                <h3 className="font-black text-gray-900 text-lg mb-4">{lang === 'fr' ? `Ajouter un repas pour ${mealPlanDay}` : `Dugal lekk ci ${mealPlanDay}`}</h3>
+                <div className="space-y-3">
+                  {plats.slice(0, 20).map(p => (
+                    <div key={p.id} onClick={() => { setMealPlan(prev => ({...prev, [mealPlanDay]: [...prev[mealPlanDay], p]})); setMealPlanDay(null); }}
+                      className="flex items-center gap-3 p-3 bg-neutral-50 rounded-2xl cursor-pointer hover:bg-primary/10 transition-colors">
+                      <img src={p.image_url} alt="" className="w-14 h-14 rounded-xl object-cover" loading="lazy" />
+                      <div className="flex-1">
+                        <p className="font-bold text-sm text-gray-800">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.price.toLocaleString()} FCFA</p>
                       </div>
-                    ))}
-                  </div>
-                  {/* Carte de suivi */}
-                  <div className="rounded-3xl overflow-hidden shadow-xl mb-6" style={{height: '280px'}}>
-                    <MapContainer
-                      center={userPosition ? [userPosition.lat, userPosition.lng] : [14.693, -17.473]}
-                      zoom={14} style={{height:'100%', width:'100%'}} zoomControl={false}
-                    >
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      {userPosition && (
-                        <Marker position={[userPosition.lat, userPosition.lng]}>
-                          <Popup>📍 Votre adresse</Popup>
-                        </Marker>
-                      )}
-                      {livreurPosition && (
-                        <Marker position={[livreurPosition.lat, livreurPosition.lng]}>
-                          <Popup>🛵 Votre livreur</Popup>
-                        </Marker>
-                      )}
-                    </MapContainer>
-                  </div>
-                  {/* Fiche livreur */}
-                  <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
-                    <img src={activeLivraison.livreur.avatar} className="w-16 h-16 rounded-2xl object-cover" alt="" />
-                    <div className="flex-1">
-                      <p className="font-black text-gray-900">{activeLivraison.livreur.name}</p>
-                      <p className="text-xs text-gray-400">⭐ {activeLivraison.livreur.note} · Livreur vérifié</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs font-black px-3 py-1 rounded-full ${
-                          livraisonStep === 0 ? 'bg-yellow-100 text-yellow-700' :
-                          livraisonStep === 1 ? 'bg-blue-100 text-blue-700 animate-pulse' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {livraisonStep === 0 ? '⏳ Prépare votre commande' :
-                           livraisonStep === 1 ? '🛵 En route vers vous' :
-                           '✅ Commande livrée !'}
-                        </span>
-                      </div>
+                      <span className="text-primary font-bold text-xs">+</span>
                     </div>
-                    <a href={`tel:${activeLivraison.livreur.phone}`}
-                      className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 hover:bg-green-100 transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
-                    </a>
-                  </div>
-                  {/* Facture */}
-                  <div className="bg-gradient-to-br from-secondary to-slate-800 rounded-3xl p-6 text-white mt-4">
-                    <h3 className="font-black text-lg mb-4">Facture de livraison 🧾</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between"><span className="text-white/60">Tarif de base</span><span className="font-bold">500 FCFA</span></div>
-                      <div className="flex justify-between"><span className="text-white/60">Distance ({activeLivraison.priceData?.dist} km × 200)</span><span className="font-bold">{activeLivraison.priceData?.parKm} FCFA</span></div>
-                      <div className="flex justify-between"><span className="text-white/60">Durée ({activeLivraison.priceData?.duree} min × 30)</span><span className="font-bold">{activeLivraison.priceData?.parMin} FCFA</span></div>
-                      <div className="border-t border-white/20 pt-2 flex justify-between text-base">
-                        <span className="font-black">Total livraison</span>
-                        <span className="font-black text-primary">{activeLivraison.priceData?.total?.toLocaleString()} FCFA</span>
-                      </div>
-                    </div>
-                  </div>
-                  {livraisonStep === 2 && (
-                    <button onClick={() => { setActiveLivraison(null); setLivraisonStep(0); setLivreurPosition(null); }}
-                      className="mt-6 w-full bg-green-500 text-white font-black py-5 rounded-3xl shadow-xl">
-                      ✅ Confirmer la réception
-                    </button>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-20">
-                  <div className="text-7xl mb-4">🛵</div>
-                  <h3 className="text-xl font-black text-gray-900 mb-2">Aucune livraison active</h3>
-                  <p className="text-gray-500 text-sm mb-8">Vos livraisons en cours apparaîtront ici</p>
-                  <button onClick={() => setActivePage('explorer')} className="bg-primary text-white font-black px-8 py-4 rounded-2xl shadow-xl shadow-primary/20">
-                    Commander maintenant
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* --- ONGLET LIVREURS --- */}
-          {selectedLivreur === 'livreurs' && (
-            <div className="max-w-2xl mx-auto px-6 pt-6">
-              {/* Carte des livreurs */}
-              <div className="rounded-3xl overflow-hidden shadow-xl mb-6" style={{height:'220px'}}>
-                <MapContainer center={[14.693, -17.465]} zoom={13} style={{height:'100%',width:'100%'}} zoomControl={false}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  {LIVREURS.map(l => (
-                    <Marker key={l.id} position={[l.lat, l.lng]}>
-                      <Popup>
-                        <div className="text-center">
-                          <p className="font-black text-sm">{l.name}</p>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            l.status==='disponible' ? 'bg-green-100 text-green-700' :
-                            l.status==='en_course' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            {l.status==='disponible'?'🟢 Disponible':l.status==='en_course'?'🟡 En course':'⚫ Hors ligne'}
-                          </span>
-                        </div>
-                      </Popup>
-                    </Marker>
                   ))}
-                </MapContainer>
-              </div>
-              {/* Stats rapides */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
-                <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
-                  <p className="text-2xl font-black text-green-500">{LIVREURS.filter(l=>l.status==='disponible').length}</p>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Dispos</p>
                 </div>
-                <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
-                  <p className="text-2xl font-black text-yellow-500">{LIVREURS.filter(l=>l.status==='en_course').length}</p>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">En course</p>
-                </div>
-                <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100">
-                  <p className="text-2xl font-black text-gray-400">{LIVREURS.filter(l=>l.status==='hors_ligne').length}</p>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Hors ligne</p>
-                </div>
-              </div>
-              {/* Liste livreurs */}
-              <div className="space-y-4">
-                {LIVREURS.map(l => (
-                  <div key={l.id} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-                    <div className="flex items-center gap-4">
-                      <img src={l.avatar} className="w-14 h-14 rounded-2xl" alt="" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="font-black text-gray-900">{l.name}</p>
-                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
-                            l.status==='disponible'?'bg-green-100 text-green-700':
-                            l.status==='en_course'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-500'
-                          }`}>
-                            {l.status==='disponible'?'🟢 Disponible':l.status==='en_course'?'🟡 En course':'⚫ Hors ligne'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-0.5">{l.phone}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className="text-xs font-bold text-gray-600">⭐ {l.note}</span>
-                          <span className="text-xs font-bold text-gray-400">{l.courses} courses</span>
-                          <span className="text-xs font-black text-primary">{l.revenus.toLocaleString()} F</span>
-                        </div>
-                      </div>
-                    </div>
-                    {l.status === 'disponible' && (
-                      <button
-                        onClick={() => {
-                          const dest = userPosition || { lat: 14.693, lng: -17.450 };
-                          const restLat = 14.693, restLng = -17.473;
-                          const priceData = calcDeliveryPrice(dest.lat, dest.lng, restLat, restLng);
-                          setActiveLivraison({ livreur: l, priceData });
-                          startLivraisonSimulation(l, dest.lat, dest.lng);
-                          setSelectedLivreur('suivi');
-                        }}
-                        className="mt-4 w-full bg-primary/10 text-primary font-black text-sm py-3 rounded-2xl hover:bg-primary hover:text-white transition-all">
-                        🛵 Assigner une livraison test
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* --- ONGLET TARIFS --- */}
-          {selectedLivreur === 'tarifs' && (
-            <div className="max-w-2xl mx-auto px-6 pt-6">
-              {/* Formule */}
-              <div className="bg-gradient-to-br from-primary to-orange-600 rounded-3xl p-6 text-white mb-6 shadow-xl">
-                <h3 className="font-black text-xl mb-2">Formule de calcul</h3>
-                <p className="text-white/70 text-sm mb-4">Prix calculé en temps réel selon votre position</p>
-                <div className="bg-white/20 rounded-2xl p-4 font-mono text-sm">
-                  Prix = Base + (km × 200) + (min × 30)
-                </div>
-              </div>
-              {/* Grille tarifaire */}
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-4">
-                <h3 className="font-black text-gray-900 mb-4">Grille tarifaire</h3>
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left">
-                    <th className="pb-3 text-[10px] font-black text-gray-400 uppercase">Composante</th>
-                    <th className="pb-3 text-[10px] font-black text-gray-400 uppercase text-right">Prix</th>
-                  </tr></thead>
-                  <tbody className="divide-y divide-gray-50">
-                    <tr><td className="py-3 text-gray-700 font-medium">Tarif de base</td><td className="py-3 text-right font-black">500 FCFA</td></tr>
-                    <tr><td className="py-3 text-gray-700 font-medium">Par kilomètre</td><td className="py-3 text-right font-black">200 FCFA/km</td></tr>
-                    <tr><td className="py-3 text-gray-700 font-medium">Par minute</td><td className="py-3 text-right font-black">30 FCFA/min</td></tr>
-                    <tr><td className="py-3 text-gray-700 font-medium">Vitesse moto</td><td className="py-3 text-right font-black text-gray-400">25 km/h</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              {/* Simulateur */}
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-                <h3 className="font-black text-gray-900 mb-4">Simulateur de prix</h3>
-                {userPosition ? (
-                  <div className="space-y-3">
-                    {Object.entries(RESTAURANTS_DATA).slice(0, 6).map(([name, data]) => {
-                      const pd = calcDeliveryPrice(userPosition.lat, userPosition.lng, data.lat, data.lng);
-                      return (
-                        <div key={name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                          <div>
-                            <p className="font-bold text-gray-900 text-sm">{name}</p>
-                            <p className="text-xs text-gray-400">{pd.dist} km · {pd.duree} min</p>
-                          </div>
-                          <span className="font-black text-primary">{pd.total.toLocaleString()} FCFA</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 text-sm">Activez la géolocalisation pour voir les estimations</p>
-                )}
               </div>
             </div>
           )}
@@ -1598,12 +1974,11 @@ function App() {
       <nav className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.07)] z-50">
         <div className="flex justify-around items-center h-20 max-w-2xl mx-auto px-6">
           {[
-            { id:'explorer', label:'Explorer', icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
-            { id:'restaurants', label:'Restau', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
-            { id:'livraisons', label:'Livraison', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> },
-            { id:'panier', label:'Panier', badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
-            { id:'carte', label:'Carte', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg> },
-            { id:'profil', label:'Profil', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
+            { id:'explorer', label: T[lang].explorer, icon: <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg> },
+            { id:'restaurants', label: T[lang].restaurants, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
+            { id:'panier', label: T[lang].panier, badge: panier.length, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg> },
+            { id:'commandes', label: T[lang].commandes, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> },
+            { id:'profil', label: T[lang].profil, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1707,5 +2082,826 @@ const Store = ({ className }) => (
 const ChevronRight = ({ className }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
 );
+
+// ===== LIVE TRACKING MAP (OpenStreetMap/Leaflet - FREE, no API key) =====
+function LiveTrackingMap({ courierLat, courierLng, clientLat, clientLng, restaurantLat, restaurantLng }) {
+  const mapRef = React.useRef(null);
+  const mapInstanceRef = React.useRef(null);
+  const markersRef = React.useRef({});
+
+  useEffect(() => {
+    // Load Leaflet CSS
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+
+    // Load Leaflet JS
+    const loadLeaflet = () => {
+      return new Promise((resolve) => {
+        if (window.L) return resolve(window.L);
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => resolve(window.L);
+        document.head.appendChild(script);
+      });
+    };
+
+    loadLeaflet().then(L => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+      }
+
+      const map = L.map(mapRef.current, { zoomControl: false }).setView([courierLat, courierLng], 14);
+      mapInstanceRef.current = map;
+
+      // Dark-styled OpenStreetMap tiles (CartoDB Dark)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Courier marker (orange pulsing)
+      const courierIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:40px;height:40px;border-radius:50%;background:rgba(249,115,22,0.3);display:flex;align-items:center;justify-content:center;animation:pulse 2s infinite">
+          <div style="width:16px;height:16px;border-radius:50%;background:#f97316;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>
+        </div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+      markersRef.current.courier = L.marker([courierLat, courierLng], { icon: courierIcon }).addTo(map).bindPopup('🏍️ Livreur');
+
+      // Restaurant marker
+      const restoIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:36px;height:36px;border-radius:10px;background:#1f2937;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.3)"><span style="font-size:18px">🍽️</span></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+      L.marker([restaurantLat, restaurantLng], { icon: restoIcon }).addTo(map).bindPopup('Restaurant');
+
+      // Client marker (you)
+      const clientIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:36px;height:36px;border-radius:10px;background:#10b981;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.3)"><span style="font-size:18px">📍</span></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+      L.marker([clientLat, clientLng], { icon: clientIcon }).addTo(map).bindPopup('Vous');
+
+      // Draw route line
+      const routeLine = L.polyline([
+        [restaurantLat, restaurantLng],
+        [courierLat, courierLng],
+        [clientLat, clientLng],
+      ], { color: '#f97316', weight: 4, opacity: 0.7, dashArray: '10, 10' }).addTo(map);
+
+      // Fit bounds to show all markers
+      const bounds = L.latLngBounds([
+        [courierLat, courierLng],
+        [restaurantLat, restaurantLng],
+        [clientLat, clientLng],
+      ]);
+      map.fitBounds(bounds, { padding: [40, 40] });
+
+      // Add pulse animation CSS
+      if (!document.getElementById('map-pulse-css')) {
+        const style = document.createElement('style');
+        style.id = 'map-pulse-css';
+        style.textContent = `@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:0.7}}`;
+        document.head.appendChild(style);
+      }
+    });
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update courier marker position in real-time
+  useEffect(() => {
+    if (markersRef.current.courier && window.L) {
+      markersRef.current.courier.setLatLng([courierLat, courierLng]);
+    }
+  }, [courierLat, courierLng]);
+
+  return <div ref={mapRef} style={{ width: '100%', height: '100%', minHeight: 300, zIndex: 1 }} />;
+}
+
+// ===== ADDRESS PICKER WITH AUTOCOMPLETE =====
+function AddressPicker({ value, onChange, onSelect, userLocation }) {
+  const [query, setQuery] = useState(value || '');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = React.useRef(null);
+
+  const search = async (q) => {
+    if (q.length < 3) { setSuggestions([]); return; }
+    try {
+      const bounds = userLocation
+        ? `&viewbox=${userLocation.lng - 0.2},${userLocation.lat - 0.2},${userLocation.lng + 0.2},${userLocation.lat + 0.2}&bounded=1`
+        : '';
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=sn&limit=5&addressdetails=1${bounds}`);
+      const data = await res.json();
+      setSuggestions(data.map(d => ({
+        display: d.display_name.split(',').slice(0, 3).join(', '),
+        full: d.display_name,
+        lat: parseFloat(d.lat),
+        lng: parseFloat(d.lon),
+      })));
+      setShowSuggestions(true);
+    } catch { setSuggestions([]); }
+  };
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    setQuery(v);
+    onChange && onChange(v);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(v), 400);
+  };
+
+  const handleSelect = (s) => {
+    setQuery(s.display);
+    setShowSuggestions(false);
+    onSelect && onSelect(s);
+  };
+
+  return (
+    <div className="relative">
+      <div className="flex items-center bg-neutral-50 rounded-2xl border border-gray-100 overflow-hidden">
+        <span className="pl-4 text-lg">📍</span>
+        <input
+          type="text"
+          value={query}
+          onChange={handleChange}
+          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+          placeholder="Entrez votre adresse de livraison..."
+          className="flex-1 bg-transparent px-3 py-4 text-sm font-bold outline-none"
+        />
+        {userLocation && (
+          <button onClick={() => {
+            setQuery('Ma position actuelle');
+            onSelect && onSelect({ display: 'Ma position', lat: userLocation.lat, lng: userLocation.lng });
+            setShowSuggestions(false);
+          }} className="pr-4 text-primary text-xs font-bold whitespace-nowrap">
+            GPS
+          </button>
+        )}
+      </div>
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          {suggestions.map((s, i) => (
+            <div key={i} onClick={() => handleSelect(s)} className="flex items-center px-4 py-3 hover:bg-neutral-50 cursor-pointer transition-colors border-b border-gray-50 last:border-0">
+              <span className="text-lg mr-3">📍</span>
+              <span className="text-sm font-medium text-gray-700 line-clamp-1">{s.display}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== MINI MAP PREVIEW (for checkout/order) =====
+function MiniMapPreview({ lat, lng, label }) {
+  const mapRef = React.useRef(null);
+
+  useEffect(() => {
+    if (!lat || !lng) return;
+
+    const loadLeaflet = () => {
+      return new Promise((resolve) => {
+        if (window.L) return resolve(window.L);
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => resolve(window.L);
+        document.head.appendChild(script);
+      });
+    };
+
+    let map;
+    loadLeaflet().then(L => {
+      map = L.map(mapRef.current, { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([lat, lng], 15);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '', maxZoom: 19,
+      }).addTo(map);
+
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:30px;height:30px;border-radius:50%;background:rgba(249,115,22,0.3);display:flex;align-items:center;justify-content:center">
+          <div style="width:12px;height:12px;border-radius:50%;background:#f97316;border:2px solid white"></div>
+        </div>`,
+        iconSize: [30, 30], iconAnchor: [15, 15],
+      });
+      L.marker([lat, lng], { icon }).addTo(map);
+    });
+
+    return () => { if (map) map.remove(); };
+  }, [lat, lng]);
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+      <div ref={mapRef} style={{ width: '100%', height: 150 }} />
+      {label && <div className="bg-white px-4 py-2"><p className="text-xs font-bold text-gray-600 truncate">📍 {label}</p></div>}
+    </div>
+  );
+}
+
+// ===== WALLET PAGE =====
+function WalletPage({ user }) {
+  const [balance, setBalance] = useState(0);
+  const [transactions, setTransactions] = useState([]);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositMethod, setDepositMethod] = useState('wave');
+  const [loading, setLoading] = useState(false);
+  const [showDeposit, setShowDeposit] = useState(false);
+
+  useEffect(() => {
+    loadWallet();
+  }, []);
+
+  const loadWallet = async () => {
+    try {
+      const { walletAPI } = await import('./api');
+      const b = await walletAPI.getBalance();
+      setBalance(b.balance);
+      const t = await walletAPI.getTransactions();
+      setTransactions(t.data || []);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleDeposit = async () => {
+    if (!depositAmount || parseFloat(depositAmount) < 100) return alert('Montant minimum 100 FCFA');
+    setLoading(true);
+    try {
+      const { walletAPI } = await import('./api');
+      await walletAPI.deposit(parseFloat(depositAmount), depositMethod);
+      setDepositAmount('');
+      setShowDeposit(false);
+      loadWallet();
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-br from-primary to-orange-600 rounded-[32px] p-8 text-white shadow-xl">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-white/60">Solde Portefeuille</p>
+        <h2 className="text-4xl font-black mt-2">{balance.toLocaleString()} <span className="text-lg">FCFA</span></h2>
+        <div className="flex gap-3 mt-6">
+          <button onClick={() => setShowDeposit(!showDeposit)} className="flex-1 bg-white/20 hover:bg-white/30 rounded-2xl py-3 text-sm font-black transition-colors">Recharger</button>
+          <button className="flex-1 bg-white/20 hover:bg-white/30 rounded-2xl py-3 text-sm font-black transition-colors">Retirer</button>
+        </div>
+      </div>
+
+      {showDeposit && (
+        <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100">
+          <h3 className="font-black text-gray-900 mb-4">Recharger le portefeuille</h3>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {[1000, 2000, 5000].map(a => (
+              <button key={a} onClick={() => setDepositAmount(String(a))} className={`py-3 rounded-2xl text-sm font-bold border-2 transition-colors ${depositAmount === String(a) ? 'border-primary bg-primary/10 text-primary' : 'border-gray-100 text-gray-600'}`}>
+                {a.toLocaleString()}
+              </button>
+            ))}
+          </div>
+          <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Montant personnalisé" className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none mb-3" />
+          <div className="flex gap-2 mb-4">
+            {['wave', 'orange_money'].map(m => (
+              <button key={m} onClick={() => setDepositMethod(m)} className={`flex-1 py-3 rounded-2xl text-xs font-bold border-2 transition-colors ${depositMethod === m ? 'border-primary bg-primary/10 text-primary' : 'border-gray-100 text-gray-500'}`}>
+                {m === 'wave' ? 'Wave' : 'Orange Money'}
+              </button>
+            ))}
+          </div>
+          <button onClick={handleDeposit} disabled={loading} className="w-full bg-primary text-white font-black py-4 rounded-2xl shadow-lg shadow-primary/20 disabled:opacity-50">
+            {loading ? 'Chargement...' : 'Confirmer le dépôt'}
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white rounded-[28px] shadow-sm border border-gray-100 overflow-hidden">
+        <h3 className="font-black text-gray-900 px-6 pt-5 pb-3">Transactions récentes</h3>
+        {transactions.length === 0 ? (
+          <p className="text-gray-400 text-sm px-6 pb-6">Aucune transaction</p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {transactions.map((t, i) => (
+              <div key={i} className="flex items-center px-6 py-4">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mr-4 ${t.amount > 0 ? 'bg-green-100' : 'bg-red-100'}`}>
+                  <span className="text-lg">{t.type === 'deposit' ? '💰' : t.type === 'cashback' ? '🎁' : t.type === 'payment' ? '🛒' : '💸'}</span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm text-gray-800">{t.description}</p>
+                  <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString('fr-FR')}</p>
+                </div>
+                <span className={`font-black text-sm ${t.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {t.amount > 0 ? '+' : ''}{parseFloat(t.amount).toLocaleString()} F
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== GAMIFICATION PAGE =====
+function GamificationPage({ user }) {
+  const [badges, setBadges] = useState([]);
+  const [myBadges, setMyBadges] = useState([]);
+  const [challenges, setChallenges] = useState([]);
+  const [myChallenges, setMyChallenges] = useState([]);
+  const [tab, setTab] = useState('badges');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const { gamificationAPI } = await import('./api');
+      const [b, mb, c, mc] = await Promise.all([
+        gamificationAPI.getBadges().catch(() => []),
+        gamificationAPI.getMyBadges().catch(() => []),
+        gamificationAPI.getChallenges().catch(() => []),
+        gamificationAPI.getMyChallenges().catch(() => []),
+      ]);
+      setBadges(b); setMyBadges(mb); setChallenges(c); setMyChallenges(mc);
+    } catch(e) { console.error(e); }
+  };
+
+  const joinChallenge = async (id) => {
+    try {
+      const { gamificationAPI } = await import('./api');
+      await gamificationAPI.joinChallenge(id);
+      loadData();
+    } catch(e) { alert(e.message); }
+  };
+
+  const earnedIds = new Set((myBadges || []).map(b => b.badge_id));
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-black text-gray-900">Défis & Badges</h2>
+      <div className="flex gap-2">
+        {['badges', 'challenges'].map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-colors ${tab === t ? 'bg-primary text-white' : 'bg-white text-gray-500 border border-gray-100'}`}>
+            {t === 'badges' ? 'Badges' : 'Défis'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'badges' && (
+        <div className="grid grid-cols-3 gap-3">
+          {(badges || []).map(b => (
+            <div key={b.id} className={`bg-white rounded-3xl p-4 text-center shadow-sm border ${earnedIds.has(b.id) ? 'border-primary' : 'border-gray-100 opacity-50'}`}>
+              <span className="text-3xl">{b.icon || '🏅'}</span>
+              <p className="text-xs font-black mt-2 text-gray-800">{b.name}</p>
+              {earnedIds.has(b.id) && <span className="text-[9px] font-bold text-primary">Obtenu!</span>}
+            </div>
+          ))}
+          {(badges || []).length === 0 && <p className="col-span-3 text-gray-400 text-sm text-center py-8">Aucun badge disponible</p>}
+        </div>
+      )}
+
+      {tab === 'challenges' && (
+        <div className="space-y-3">
+          {(challenges || []).map(c => {
+            const myC = (myChallenges || []).find(mc => mc.challenge_id === c.id);
+            return (
+              <div key={c.id} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${c.type === 'daily' ? 'bg-blue-100 text-blue-600' : c.type === 'weekly' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
+                      {c.type}
+                    </span>
+                    <h4 className="font-black text-gray-900 mt-2">{c.title}</h4>
+                    <p className="text-xs text-gray-400 mt-1">{c.description}</p>
+                  </div>
+                  <span className="text-2xl">{c.reward_type === 'points' ? '🪙' : c.reward_type === 'discount' ? '🏷️' : '🎁'}</span>
+                </div>
+                {myC ? (
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-bold text-gray-500">{myC.current_value}/{c.target_value}</span>
+                      <span className="font-bold text-primary">{myC.is_completed ? 'Terminé!' : `${Math.round(myC.current_value/c.target_value*100)}%`}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2 rounded-full">
+                      <div className={`h-full rounded-full ${myC.is_completed ? 'bg-green-500' : 'bg-primary'}`} style={{width: `${Math.min(100, myC.current_value/c.target_value*100)}%`}}></div>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => joinChallenge(c.id)} className="mt-4 w-full bg-primary/10 text-primary font-bold py-3 rounded-2xl text-sm hover:bg-primary/20 transition-colors">
+                    Participer
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {(challenges || []).length === 0 && <p className="text-gray-400 text-sm text-center py-8">Aucun défi actif</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== GIFT CARDS PAGE =====
+function GiftCardsPage({ user }) {
+  const [tab, setTab] = useState('send');
+  const [amount, setAmount] = useState('');
+  const [phone, setPhone] = useState('');
+  const [message, setMessage] = useState('');
+  const [redeemCode, setRedeemCode] = useState('');
+  const [sentCards, setSentCards] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { loadSent(); }, []);
+
+  const loadSent = async () => {
+    try {
+      const { giftCardAPI } = await import('./api');
+      const data = await giftCardAPI.getSent();
+      setSentCards(data || []);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleSend = async () => {
+    if (!amount || !phone) return alert('Remplissez tous les champs');
+    setLoading(true);
+    try {
+      const { giftCardAPI } = await import('./api');
+      const result = await giftCardAPI.create({ amount: parseFloat(amount), recipient_phone: phone, message });
+      alert(`Carte cadeau envoyée! Code: ${result.gift_card.code}`);
+      setAmount(''); setPhone(''); setMessage('');
+      loadSent();
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const handleRedeem = async () => {
+    if (!redeemCode) return;
+    setLoading(true);
+    try {
+      const { giftCardAPI } = await import('./api');
+      const result = await giftCardAPI.redeem(redeemCode);
+      alert(result.message);
+      setRedeemCode('');
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-black text-gray-900">Cartes Cadeau</h2>
+      <div className="flex gap-2">
+        {['send', 'redeem', 'history'].map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase transition-colors ${tab === t ? 'bg-primary text-white' : 'bg-white text-gray-500 border border-gray-100'}`}>
+            {t === 'send' ? 'Offrir' : t === 'redeem' ? 'Utiliser' : 'Historique'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'send' && (
+        <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100 space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {[2000, 5000, 10000].map(a => (
+              <button key={a} onClick={() => setAmount(String(a))} className={`py-3 rounded-2xl text-sm font-bold border-2 ${amount === String(a) ? 'border-primary bg-primary/10 text-primary' : 'border-gray-100 text-gray-600'}`}>
+                {a.toLocaleString()} F
+              </button>
+            ))}
+          </div>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Montant personnalisé" className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Téléphone du destinataire" className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Message (optionnel)" rows={2} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none resize-none" />
+          <button onClick={handleSend} disabled={loading} className="w-full bg-primary text-white font-black py-4 rounded-2xl shadow-lg shadow-primary/20 disabled:opacity-50">
+            {loading ? 'Envoi...' : 'Envoyer la carte cadeau'}
+          </button>
+        </div>
+      )}
+
+      {tab === 'redeem' && (
+        <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100 space-y-4">
+          <input type="text" value={redeemCode} onChange={e => setRedeemCode(e.target.value.toUpperCase())} placeholder="Entrez le code cadeau" className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none text-center tracking-widest" />
+          <button onClick={handleRedeem} disabled={loading} className="w-full bg-green-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-green-500/20 disabled:opacity-50">
+            {loading ? 'Vérification...' : 'Utiliser la carte'}
+          </button>
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="space-y-3">
+          {sentCards.length === 0 ? (
+            <p className="text-gray-400 text-sm text-center py-8">Aucune carte envoyée</p>
+          ) : sentCards.map((c, i) => (
+            <div key={i} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-black text-gray-900">{parseFloat(c.amount).toLocaleString()} FCFA</p>
+                  <p className="text-xs text-gray-400 mt-1">Pour: {c.recipient_phone}</p>
+                  <p className="text-xs text-gray-400">Code: {c.code}</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${c.is_redeemed ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                  {c.is_redeemed ? 'Utilisée' : 'Active'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== SUBSCRIPTIONS PAGE =====
+function SubscriptionsPage({ user }) {
+  const [plans, setPlans] = useState([]);
+  const [mySub, setMySub] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    try {
+      const { subscriptionAPI } = await import('./api');
+      const [p, s] = await Promise.all([
+        subscriptionAPI.getPlans().catch(() => []),
+        subscriptionAPI.getMySubscription().catch(() => null),
+      ]);
+      setPlans(p || []);
+      setMySub(s);
+    } catch(e) { console.error(e); }
+  };
+
+  const subscribe = async (planId) => {
+    setLoading(true);
+    try {
+      const { subscriptionAPI } = await import('./api');
+      await subscriptionAPI.subscribe(planId);
+      loadData();
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-black text-gray-900">Abonnements Repas</h2>
+
+      {mySub && mySub.status === 'active' && (
+        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-[28px] p-6 text-white shadow-xl">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-white/60">Abonnement actif</p>
+          <h3 className="text-xl font-black mt-1">{mySub.plan_name || 'Forfait'}</h3>
+          <p className="text-white/80 text-sm mt-2">Repas restants: <span className="font-black text-white">{mySub.meals_remaining}</span></p>
+          <p className="text-white/60 text-xs mt-1">Expire: {new Date(mySub.expires_at).toLocaleDateString('fr-FR')}</p>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {(plans || []).map(plan => (
+          <div key={plan.id} className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="font-black text-gray-900 text-lg">{plan.name}</h3>
+                <p className="text-gray-400 text-sm mt-1">{plan.description}</p>
+              </div>
+              {plan.discount_percent > 0 && (
+                <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">-{plan.discount_percent}%</span>
+              )}
+            </div>
+            <div className="flex items-end gap-2 mt-4">
+              <span className="text-3xl font-black text-primary">{parseFloat(plan.price_per_week).toLocaleString()}</span>
+              <span className="text-gray-400 text-sm font-medium mb-1">FCFA/semaine</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{plan.meals_per_week} repas/semaine</p>
+            <button onClick={() => subscribe(plan.id)} disabled={loading || (mySub && mySub.status === 'active')} className="w-full mt-4 bg-primary text-white font-black py-3 rounded-2xl disabled:opacity-40">
+              {mySub && mySub.status === 'active' ? 'Déjà abonné' : "S'abonner"}
+            </button>
+          </div>
+        ))}
+        {plans.length === 0 && <p className="text-gray-400 text-sm text-center py-8">Aucun forfait disponible pour le moment</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===== CATERING PAGE =====
+function CateringPage({ user }) {
+  const [requests, setRequests] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ restaurant_id: '', event_date: '', guest_count: '', budget: '', notes: '' });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { loadRequests(); }, []);
+
+  const loadRequests = async () => {
+    try {
+      const { cateringAPI } = await import('./api');
+      const data = await cateringAPI.getMyRequests();
+      setRequests(data || []);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.restaurant_id || !form.event_date || !form.guest_count) return alert('Remplissez les champs obligatoires');
+    setLoading(true);
+    try {
+      const { cateringAPI } = await import('./api');
+      await cateringAPI.create({ ...form, restaurant_id: parseInt(form.restaurant_id), guest_count: parseInt(form.guest_count), budget: form.budget ? parseFloat(form.budget) : undefined });
+      setShowForm(false);
+      setForm({ restaurant_id: '', event_date: '', guest_count: '', budget: '', notes: '' });
+      loadRequests();
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const statusColors = { pending: 'bg-yellow-100 text-yellow-600', accepted: 'bg-green-100 text-green-600', rejected: 'bg-red-100 text-red-600', completed: 'bg-blue-100 text-blue-600' };
+  const statusLabels = { pending: 'En attente', accepted: 'Acceptée', rejected: 'Rejetée', completed: 'Terminée' };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-gray-900">Mode Traiteur</h2>
+        <button onClick={() => setShowForm(!showForm)} className="bg-primary text-white px-4 py-2 rounded-2xl text-xs font-bold">
+          {showForm ? 'Fermer' : '+ Demande'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100 space-y-3">
+          <input type="number" placeholder="ID Restaurant" value={form.restaurant_id} onChange={e => setForm({...form, restaurant_id: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <input type="datetime-local" value={form.event_date} onChange={e => setForm({...form, event_date: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <input type="number" placeholder="Nombre d'invités" value={form.guest_count} onChange={e => setForm({...form, guest_count: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <input type="number" placeholder="Budget (FCFA)" value={form.budget} onChange={e => setForm({...form, budget: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <textarea placeholder="Notes" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={2} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none resize-none" />
+          <button onClick={handleSubmit} disabled={loading} className="w-full bg-primary text-white font-black py-4 rounded-2xl disabled:opacity-50">
+            {loading ? 'Envoi...' : 'Envoyer la demande'}
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {requests.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-8">Aucune demande traiteur</p>
+        ) : requests.map((r, i) => (
+          <div key={i} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+            <div className="flex justify-between items-start">
+              <div>
+                <h4 className="font-black text-gray-900">{r.restaurant_name || `Restaurant #${r.restaurant_id}`}</h4>
+                <p className="text-xs text-gray-400 mt-1">{new Date(r.event_date).toLocaleDateString('fr-FR')} - {r.guest_count} invités</p>
+                {r.budget && <p className="text-xs text-gray-500 font-bold">Budget: {parseFloat(r.budget).toLocaleString()} FCFA</p>}
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${statusColors[r.status] || 'bg-gray-100 text-gray-600'}`}>
+                {statusLabels[r.status] || r.status}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===== SUPPORT PAGE =====
+function SupportPage({ user }) {
+  const [tickets, setTickets] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [viewTicket, setViewTicket] = useState(null);
+  const [ticketMessages, setTicketMessages] = useState([]);
+  const [form, setForm] = useState({ subject: '', category: 'general', order_id: '' });
+  const [replyText, setReplyText] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { loadTickets(); }, []);
+
+  const loadTickets = async () => {
+    try {
+      const { supportAPI } = await import('./api');
+      const data = await supportAPI.getMyTickets();
+      setTickets(data.data || data || []);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleCreate = async () => {
+    if (!form.subject) return alert('Sujet requis');
+    setLoading(true);
+    try {
+      const { supportAPI } = await import('./api');
+      await supportAPI.create({ ...form, order_id: form.order_id ? parseInt(form.order_id) : undefined });
+      setShowForm(false);
+      setForm({ subject: '', category: 'general', order_id: '' });
+      loadTickets();
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const openTicket = async (ticket) => {
+    setViewTicket(ticket);
+    try {
+      const { supportAPI } = await import('./api');
+      const data = await supportAPI.getTicket(ticket.id);
+      setTicketMessages(data.messages || []);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleReply = async () => {
+    if (!replyText.trim()) return;
+    setLoading(true);
+    try {
+      const { supportAPI } = await import('./api');
+      await supportAPI.reply(viewTicket.id, replyText);
+      setReplyText('');
+      openTicket(viewTicket);
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const statusColors = { open: 'bg-blue-100 text-blue-600', in_progress: 'bg-yellow-100 text-yellow-600', resolved: 'bg-green-100 text-green-600', closed: 'bg-gray-100 text-gray-600' };
+  const statusLabels = { open: 'Ouvert', in_progress: 'En cours', resolved: 'Résolu', closed: 'Fermé' };
+  const catLabels = { order_issue: 'Commande', payment: 'Paiement', delivery: 'Livraison', general: 'Général', refund: 'Remboursement' };
+
+  if (viewTicket) return (
+    <div className="space-y-4">
+      <button onClick={() => { setViewTicket(null); setTicketMessages([]); }} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 font-bold transition-colors">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+        Retour aux tickets
+      </button>
+      <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="font-black text-gray-900">{viewTicket.subject}</h3>
+            <p className="text-xs text-gray-400 mt-1">{catLabels[viewTicket.category]} - #{viewTicket.id}</p>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${statusColors[viewTicket.status]}`}>{statusLabels[viewTicket.status]}</span>
+        </div>
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {ticketMessages.map((m, i) => (
+            <div key={i} className={`rounded-2xl p-4 ${m.is_admin ? 'bg-blue-50 ml-4' : 'bg-neutral-50 mr-4'}`}>
+              <p className="text-xs font-bold text-gray-500 mb-1">{m.is_admin ? 'Support' : 'Vous'}</p>
+              <p className="text-sm text-gray-800">{m.message}</p>
+              <p className="text-[10px] text-gray-400 mt-1">{new Date(m.created_at).toLocaleString('fr-FR')}</p>
+            </div>
+          ))}
+        </div>
+        {viewTicket.status !== 'closed' && (
+          <div className="flex gap-2 mt-4">
+            <input type="text" value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Votre message..." className="flex-1 bg-neutral-50 rounded-2xl px-4 py-3 text-sm font-bold outline-none" onKeyDown={e => e.key === 'Enter' && handleReply()} />
+            <button onClick={handleReply} disabled={loading} className="bg-primary text-white px-5 py-3 rounded-2xl font-bold text-sm disabled:opacity-50">Envoyer</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-gray-900">Support</h2>
+        <button onClick={() => setShowForm(!showForm)} className="bg-primary text-white px-4 py-2 rounded-2xl text-xs font-bold">
+          {showForm ? 'Fermer' : '+ Ticket'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100 space-y-3">
+          <input type="text" placeholder="Sujet" value={form.subject} onChange={e => setForm({...form, subject: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none">
+            {Object.entries(catLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <input type="number" placeholder="N° commande (optionnel)" value={form.order_id} onChange={e => setForm({...form, order_id: e.target.value})} className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
+          <button onClick={handleCreate} disabled={loading} className="w-full bg-primary text-white font-black py-4 rounded-2xl disabled:opacity-50">
+            {loading ? 'Envoi...' : 'Créer le ticket'}
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {tickets.length === 0 ? (
+          <div className="text-center py-12">
+            <span className="text-5xl">📞</span>
+            <p className="text-gray-400 text-sm mt-4">Aucun ticket de support</p>
+            <p className="text-gray-300 text-xs">Créez un ticket si vous avez besoin d'aide</p>
+          </div>
+        ) : tickets.map((t, i) => (
+          <div key={i} onClick={() => openTicket(t)} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 cursor-pointer hover:bg-neutral-50 transition-colors">
+            <div className="flex justify-between items-start">
+              <div>
+                <h4 className="font-black text-gray-900 text-sm">{t.subject}</h4>
+                <p className="text-xs text-gray-400 mt-1">{catLabels[t.category]} - {new Date(t.created_at).toLocaleDateString('fr-FR')}</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${statusColors[t.status]}`}>{statusLabels[t.status]}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default App;

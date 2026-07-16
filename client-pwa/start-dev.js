@@ -1,2 +1,2 @@
 process.chdir(__dirname);
-import('./node_modules/vite/bin/vite.js');
+import('vite/bin/vite.js');

@@ -27,7 +27,10 @@ export default function App() {
   const [route, setRoute] = useState([]);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+  const [tips, setTips] = useState({ tips: [], total: 0 });
+  const [showTips, setShowTips] = useState(false);
+  const [todayEarnings, setTodayEarnings] = useState(15400);
+
   const mapRef = useRef(null);
   const socketRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(height)).current;
@@ -134,8 +137,8 @@ export default function App() {
     }
     if (nextState === 'completed') {
       setRoute([]);
-      setOrder(null);
-      setTimeout(() => setDeliveryState('idle'), 3000);
+      setTodayEarnings(prev => prev + 2500);
+      setTimeout(() => { setOrder(null); setDeliveryState('idle'); }, 3000);
     }
   };
 
@@ -182,10 +185,10 @@ export default function App() {
 
       {/* HEADER CONTROLS */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn}><Ionicons name="person" size={20} color="#1f2937" /></TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => setShowTips(!showTips)}><Ionicons name="cash-outline" size={20} color={showTips ? '#f97316' : '#1f2937'} /></TouchableOpacity>
         <View style={styles.earningsCard}>
-          <Text style={styles.earnLabel}>Solde</Text>
-          <Text style={styles.earnValue}>15 400 F</Text>
+          <Text style={styles.earnLabel}>Solde du jour</Text>
+          <Text style={styles.earnValue}>{todayEarnings.toLocaleString()} F</Text>
         </View>
         <TouchableOpacity style={styles.iconBtn}><Ionicons name="notifications" size={20} color="#1f2937" /></TouchableOpacity>
       </View>
@@ -216,6 +219,7 @@ export default function App() {
       <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
         <View style={styles.sheetHeader}>
            <Text style={styles.sheetTitle}>Nouvelle Livraison ! 📦</Text>
+           {order?.is_express && <View style={styles.expressBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.expressText}>EXPRESS</Text></View>}
            <View style={styles.timerBadge}><Text style={styles.timerText}>45s</Text></View>
         </View>
         <View style={styles.missionCard}>
@@ -239,6 +243,42 @@ export default function App() {
            </TouchableOpacity>
         </View>
       </Animated.View>
+
+      {/* TIPS PANEL */}
+      {showTips && (
+        <View style={styles.tipsPanel}>
+          <Text style={styles.tipsPanelTitle}>Pourboires reçus</Text>
+          <View style={styles.tipsTotalCard}>
+            <Text style={styles.tipsTotalLabel}>Total pourboires</Text>
+            <Text style={styles.tipsTotalValue}>{tips.total.toLocaleString()} F</Text>
+          </View>
+          {tips.tips.length === 0 && <Text style={styles.tipsEmpty}>Aucun pourboire pour le moment</Text>}
+          {tips.tips.slice(0, 5).map((t, i) => (
+            <View key={i} style={styles.tipRow}>
+              <View>
+                <Text style={styles.tipClient}>{t.client_name || 'Client'}</Text>
+                <Text style={styles.tipDate}>{new Date(t.created_at).toLocaleDateString('fr-FR')}</Text>
+              </View>
+              <Text style={styles.tipAmount}>+{parseFloat(t.amount).toLocaleString()} F</Text>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.tipsCloseBtn} onPress={() => setShowTips(false)}>
+            <Text style={styles.tipsCloseText}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* COMPLETED OVERLAY */}
+      {deliveryState === 'completed' && (
+        <View style={styles.completedOverlay}>
+          <View style={styles.completedCard}>
+            <Text style={styles.completedEmoji}>🎉</Text>
+            <Text style={styles.completedTitle}>Livraison terminée !</Text>
+            <Text style={styles.completedAmount}>+2 500 F</Text>
+            {order?.tip_amount > 0 && <Text style={styles.completedTip}>Pourboire: +{order.tip_amount} F</Text>}
+          </View>
+        </View>
+      )}
 
       {/* ACTIVE BAR */}
       {deliveryState !== 'idle' && deliveryState !== 'incoming' && (
@@ -318,5 +358,28 @@ const styles = StyleSheet.create({
 
   courierMarker: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(249, 115, 22, 0.2)', justifyContent: 'center', alignItems: 'center' },
   courierCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#f97316', borderWeight: 3, borderColor: '#fff' },
-  destMarker: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center', elevation: 5 }
+  destMarker: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+
+  expressBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f97316', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginRight: 10 },
+  expressText: { color: '#fff', fontWeight: '900', fontSize: 10, marginLeft: 3 },
+
+  tipsPanel: { position: 'absolute', top: 110, left: 15, right: 15, backgroundColor: '#fff', borderRadius: 25, padding: 25, elevation: 20, zIndex: 100 },
+  tipsPanelTitle: { fontSize: 18, fontWeight: '900', color: '#111827', marginBottom: 15 },
+  tipsTotalCard: { backgroundColor: '#f0fdf4', borderRadius: 15, padding: 15, alignItems: 'center', marginBottom: 15 },
+  tipsTotalLabel: { fontSize: 10, color: '#6b7280', fontWeight: 'bold', textTransform: 'uppercase' },
+  tipsTotalValue: { fontSize: 28, fontWeight: '900', color: '#10b981', marginTop: 5 },
+  tipsEmpty: { textAlign: 'center', color: '#9ca3af', fontSize: 12, marginVertical: 10 },
+  tipRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  tipClient: { fontSize: 14, fontWeight: 'bold', color: '#374151' },
+  tipDate: { fontSize: 10, color: '#9ca3af' },
+  tipAmount: { fontSize: 16, fontWeight: '900', color: '#10b981' },
+  tipsCloseBtn: { marginTop: 15, paddingVertical: 12, alignItems: 'center' },
+  tipsCloseText: { color: '#6b7280', fontWeight: 'bold', fontSize: 14 },
+
+  completedOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 90 },
+  completedCard: { backgroundColor: '#fff', borderRadius: 30, padding: 40, alignItems: 'center', width: width * 0.8, elevation: 25 },
+  completedEmoji: { fontSize: 50, marginBottom: 10 },
+  completedTitle: { fontSize: 22, fontWeight: '900', color: '#111827' },
+  completedAmount: { fontSize: 36, fontWeight: '900', color: '#10b981', marginTop: 10 },
+  completedTip: { fontSize: 14, color: '#f97316', fontWeight: 'bold', marginTop: 5 },
 });

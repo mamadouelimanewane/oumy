@@ -27,6 +27,39 @@ const addressRoutes = require('./routes/addresses');
 const chatRoutes = require('./routes/chat');
 const loyaltyRoutes = require('./routes/loyalty');
 const payoutRoutes = require('./routes/payouts');
+// New feature routes
+const walletRoutes = require('./routes/wallet');
+const customizationRoutes = require('./routes/customization');
+const scheduledRoutes = require('./routes/scheduled');
+const gamificationRoutes = require('./routes/gamification');
+const giftcardRoutes = require('./routes/giftcards');
+const tipsRoutes = require('./routes/tips');
+const supportRoutes = require('./routes/support');
+const subscriptionRoutes = require('./routes/subscriptions');
+const deliveryZoneRoutes = require('./routes/delivery-zones');
+const storiesRoutes = require('./routes/stories');
+const socialRoutes = require('./routes/social');
+const stockRoutes = require('./routes/stock');
+const cateringRoutes = require('./routes/catering');
+const qrcodeRoutes = require('./routes/qrcodes');
+const recommendationRoutes = require('./routes/recommendations');
+const fraudRoutes = require('./routes/fraud');
+// Wave 2 feature routes
+const reorderRoutes = require('./routes/reorder');
+const chatLiveRoutes = require('./routes/chat-live');
+const preferencesRoutes = require('./routes/preferences');
+const referralRoutes = require('./routes/referral');
+const groupOrderRoutes = require('./routes/group-orders');
+const mealPlanRoutes = require('./routes/meal-plans');
+const miniGameRoutes = require('./routes/mini-games');
+const analyticsRestaurantRoutes = require('./routes/analytics-restaurant');
+const priceAlertRoutes = require('./routes/price-alerts');
+const splitPaymentRoutes = require('./routes/split-payment');
+// Wave 3 feature routes
+const photoReviewRoutes = require('./routes/photo-reviews');
+const notificationsPushRoutes = require('./routes/notifications-push');
+const voiceOrderRoutes = require('./routes/voice-order');
+const twofaRoutes = require('./routes/twofa');
 
 const app = express();
 const server = http.createServer(app);
@@ -112,6 +145,42 @@ app.use('/api/loyalty', loyaltyRoutes);
 
 // Payouts routes
 app.use('/api/payouts', payoutRoutes);
+
+// ===== NEW FEATURE ROUTES =====
+app.use('/api/wallet', walletRoutes);
+app.use('/api/customization', customizationRoutes);
+app.use('/api/scheduled', scheduledRoutes);
+app.use('/api/gamification', gamificationRoutes);
+app.use('/api/giftcards', giftcardRoutes);
+app.use('/api/tips', tipsRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/delivery-zones', deliveryZoneRoutes);
+app.use('/api/stories', storiesRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/stock', stockRoutes);
+app.use('/api/catering', cateringRoutes);
+app.use('/api/qrcodes', qrcodeRoutes);
+app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/fraud', fraudRoutes);
+
+// ===== WAVE 2 FEATURE ROUTES =====
+app.use('/api/reorder', reorderRoutes);
+app.use('/api/chat-live', chatLiveRoutes);
+app.use('/api/preferences', preferencesRoutes);
+app.use('/api/referral', referralRoutes);
+app.use('/api/group-orders', groupOrderRoutes);
+app.use('/api/meal-plans', mealPlanRoutes);
+app.use('/api/mini-games', miniGameRoutes);
+app.use('/api/analytics-restaurant', analyticsRestaurantRoutes);
+app.use('/api/price-alerts', priceAlertRoutes);
+app.use('/api/split-payment', splitPaymentRoutes);
+
+// ===== WAVE 3 FEATURE ROUTES =====
+app.use('/api/photo-reviews', photoReviewRoutes);
+app.use('/api/notifications-push', notificationsPushRoutes);
+app.use('/api/voice-order', voiceOrderRoutes);
+app.use('/api/2fa', twofaRoutes);
 
 // ==========================================
 // 🔌 SOCKET.IO - Temps Réel

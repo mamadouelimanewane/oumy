@@ -138,6 +138,45 @@ export const notificationsAPI = {
   },
 };
 
+// ===== NEW FEATURE APIs =====
+
+// Support Tickets API (Admin)
+export const supportAPI = {
+  getAll: async (params = {}) => { const q = new URLSearchParams(params).toString(); const res = await fetchWithAuth(`/support/all?${q}`); return res.json(); },
+  getTicket: async (id) => { const res = await fetchWithAuth(`/support/${id}`); return res.json(); },
+  reply: async (id, message) => { const res = await fetchWithAuth(`/support/${id}/reply`, { method: 'POST', body: JSON.stringify({ message, is_admin: true }) }); return res.json(); },
+  updateStatus: async (id, status) => { const res = await fetchWithAuth(`/support/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }); return res.json(); },
+};
+
+// Fraud Detection API
+export const fraudAPI = {
+  getAlerts: async (params = {}) => { const q = new URLSearchParams(params).toString(); const res = await fetchWithAuth(`/fraud/alerts?${q}`); return res.json(); },
+  resolve: async (id) => { const res = await fetchWithAuth(`/fraud/alerts/${id}/resolve`, { method: 'PUT' }); return res.json(); },
+  checkOrder: async (orderId) => { const res = await fetchWithAuth(`/fraud/check/${orderId}`, { method: 'POST' }); return res.json(); },
+};
+
+// Delivery Zones API
+export const deliveryZoneAPI = {
+  getAll: async () => { const res = await fetchWithAuth('/delivery-zones'); return res.json(); },
+  create: async (data) => { const res = await fetchWithAuth('/delivery-zones', { method: 'POST', body: JSON.stringify(data) }); return res.json(); },
+  getRelayPoints: async () => { const res = await fetchWithAuth('/delivery-zones/relay-points'); return res.json(); },
+  createRelayPoint: async (data) => { const res = await fetchWithAuth('/delivery-zones/relay-points', { method: 'POST', body: JSON.stringify(data) }); return res.json(); },
+};
+
+// Subscriptions (Admin)
+export const subscriptionAPI = {
+  getPlans: async () => { const res = await fetchWithAuth('/subscriptions/plans'); return res.json(); },
+  createPlan: async (data) => { const res = await fetchWithAuth('/subscriptions/plans', { method: 'POST', body: JSON.stringify(data) }); return res.json(); },
+};
+
+// Gamification (Admin)
+export const gamificationAPI = {
+  createBadge: async (data) => { const res = await fetchWithAuth('/gamification/badges', { method: 'POST', body: JSON.stringify(data) }); return res.json(); },
+  createChallenge: async (data) => { const res = await fetchWithAuth('/gamification/challenges', { method: 'POST', body: JSON.stringify(data) }); return res.json(); },
+  getBadges: async () => { const res = await fetchWithAuth('/gamification/badges'); return res.json(); },
+  getChallenges: async () => { const res = await fetchWithAuth('/gamification/challenges'); return res.json(); },
+};
+
 export const createSocketConnection = async (token) => {
   const { io } = await import('socket.io-client');
   // Utilise l'export SOCKET_URL

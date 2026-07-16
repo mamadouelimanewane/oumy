@@ -1,9 +1,0 @@
-{
-  "name": "senfood-monorepo",
-  "private": true,
-  "scripts": {
-    "build": "mkdir -p public && cd client-pwa && npm install && npm run build && cp -r dist/* ../public/ && cd ../dashboard-restaurant && npm install && npm run build && mkdir -p ../public/restaurant && cp -r dist/* ../public/restaurant/ && cd ../panel-admin && npm install && npm run build && mkdir -p ../public/admin && cp -r dist/* ../public/admin/ && cd ../app-livreur && npm install && npx expo export --platform web && mkdir -p ../public/livreur && cp -r dist/* ../public/livreur/",
-    "seed:prod": "cd backend && npm run seed:prod",
-    "install": "cd backend && npm install && cd ../client-pwa && npm install && cd ../dashboard-restaurant && npm install && cd ../panel-admin && npm install"
-  }
-}

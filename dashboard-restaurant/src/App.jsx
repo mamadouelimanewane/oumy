@@ -30,89 +30,99 @@ import {
   Megaphone,
   CreditCard,
   MessageSquare,
-  Send
+  Send,
+  ChevronRight,
+  ChevronLeft,
+  BarChart3,
 } from 'lucide-react';
-import { authAPI, restaurantAPI, notificationsAPI, createSocketConnection, promotionsAPI, payoutAPI, chatAPI } from './api';
+import { authAPI, restaurantAPI, notificationsAPI, createSocketConnection, promotionsAPI, payoutAPI, chatAPI, stockAPI, customizationAPI, storiesAPI, qrCodeAPI, cateringAPI, analyticsAPI } from './api';
 import { ShieldAlert } from 'lucide-react';
 
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-
-// --- Google Map Component for Fleet ---
+// --- Fleet Map Component (Leaflet/OpenStreetMap - no API key needed) ---
 function FleetMap({ couriersLocs }) {
   const mapRef = React.useRef(null);
-  const [googleStatus, setGoogleStatus] = React.useState('loading'); // loading, ready, error
+  const mapInstanceRef = React.useRef(null);
   const markersRef = React.useRef({});
 
   React.useEffect(() => {
-    if (!GOOGLE_MAPS_KEY) {
-       setGoogleStatus('error');
-       return;
+    // Load Leaflet CSS
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
     }
-    const scriptId = 'google-maps-script';
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=geometry`;
-      script.async = true;
-      script.onload = () => setGoogleStatus('ready');
-      script.onerror = () => setGoogleStatus('error');
-      document.body.appendChild(script);
-    } else {
-      setGoogleStatus('ready');
-    }
-  }, []);
 
-  React.useEffect(() => {
-    if (googleStatus !== 'ready' || !mapRef.current) return;
-
-    if (!mapRef.current.map) {
-      mapRef.current.map = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 14.7167, lng: -17.4677 }, // Dakar
-        zoom: 13,
-        styles: [
-          { "featureType": "poi", "stylers": [{ "visibility": "off" }] },
-          { "featureType": "transit", "stylers": [{ "visibility": "off" }] }
-        ],
-        disableDefaultUI: true,
+    const loadLeaflet = () => {
+      return new Promise((resolve) => {
+        if (window.L) return resolve(window.L);
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => resolve(window.L);
+        document.head.appendChild(script);
       });
-    }
+    };
 
-    const map = mapRef.current.map;
+    loadLeaflet().then(L => {
+      if (mapInstanceRef.current) return;
+      const map = L.map(mapRef.current, { zoomControl: true }).setView([14.7167, -17.4677], 13);
+      mapInstanceRef.current = map;
 
-    // Update Markers
-    Object.entries(couriersLocs).forEach(([id, loc]) => {
-      if (markersRef.current[id]) {
-        markersRef.current[id].setPosition({ lat: loc.lat, lng: loc.lng });
-      } else {
-        markersRef.current[id] = new window.google.maps.Marker({
-          position: { lat: loc.lat, lng: loc.lng },
-          map,
-          title: `Livreur #${id}`,
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            fillColor: '#4f46e5',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2,
-            scale: 8
-          }
-        });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Add pulse animation CSS
+      if (!document.getElementById('fleet-pulse-css')) {
+        const style = document.createElement('style');
+        style.id = 'fleet-pulse-css';
+        style.textContent = `@keyframes fleet-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:0.6}}`;
+        document.head.appendChild(style);
       }
     });
-  }, [googleStatus, couriersLocs]);
 
-  if (googleStatus === 'error') {
-     return (
-       <div className="w-full h-full bg-slate-50 flex flex-center flex-col items-center justify-center p-8 text-center border-2 border-dashed border-slate-200 rounded-3xl">
-          <ShieldAlert className="w-12 h-12 text-slate-300 mb-4" />
-          <p className="text-slate-500 font-bold mb-2">Carte Google désactivée</p>
-          <p className="text-slate-400 text-xs max-w-xs px-10">Configurez <span className="text-indigo-600 font-bold">VITE_GOOGLE_MAPS_API_KEY</span> pour activer le suivi en direct.</p>
-       </div>
-     );
-  }
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update courier markers
+  React.useEffect(() => {
+    if (!mapInstanceRef.current || !window.L) return;
+    const L = window.L;
+
+    Object.entries(couriersLocs).forEach(([id, loc]) => {
+      if (markersRef.current[id]) {
+        markersRef.current[id].setLatLng([loc.lat, loc.lng]);
+      } else {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:32px;height:32px;border-radius:50%;background:rgba(79,70,229,0.25);display:flex;align-items:center;justify-content:center;animation:fleet-pulse 2s infinite">
+            <div style="width:14px;height:14px;border-radius:50%;background:#4f46e5;border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>
+          </div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        markersRef.current[id] = L.marker([loc.lat, loc.lng], { icon }).addTo(mapInstanceRef.current).bindPopup(`🏍️ Livreur #${id}`);
+      }
+    });
+
+    // Remove markers for couriers no longer tracked
+    Object.keys(markersRef.current).forEach(id => {
+      if (!couriersLocs[id]) {
+        markersRef.current[id].remove();
+        delete markersRef.current[id];
+      }
+    });
+  }, [couriersLocs]);
 
   return (
-    <div ref={mapRef} className="w-full h-full" />
+    <div ref={mapRef} className="w-full h-full" style={{ minHeight: 300 }} />
   );
 }
 
@@ -575,6 +585,13 @@ function App() {
                  { id: 'marketing', icon: Megaphone, label: 'Marketing & Promos' },
                  { id: 'finances', icon: Wallet, label: 'Finances & Retraits' },
                  { id: 'horaires', icon: CalendarClock, label: 'Horaires' },
+                 { id: 'stock', icon: Package, label: 'Gestion Stock' },
+                 { id: 'qrcodes', icon: Utensils, label: 'QR Codes Tables' },
+                 { id: 'stories', icon: Megaphone, label: 'Stories' },
+                 { id: 'traiteur', icon: Users, label: 'Traiteur' },
+                 { id: 'options', icon: Package, label: 'Options Plats' },
+                 { id: 'analytics', icon: BarChart3, label: 'Analytiques' },
+                 { id: 'reviews', icon: Star, label: 'Avis Clients' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -1209,6 +1226,93 @@ function App() {
             </div>
           )}
 
+          {/* GESTION STOCK */}
+          {activeTab === 'stock' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <StockManager />
+            </div>
+          )}
+
+          {/* QR CODES */}
+          {activeTab === 'qrcodes' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <QRCodeManager />
+            </div>
+          )}
+
+          {/* STORIES */}
+          {activeTab === 'stories' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <StoriesManager />
+            </div>
+          )}
+
+          {/* TRAITEUR */}
+          {activeTab === 'traiteur' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <CateringManager />
+            </div>
+          )}
+
+          {/* OPTIONS PLATS */}
+          {activeTab === 'options' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <OptionsManager menuItems={menuItems} />
+            </div>
+          )}
+
+          {/* ANALYTIQUES */}
+          {activeTab === 'analytics' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <AnalyticsDashboard />
+            </div>
+          )}
+
+          {/* AVIS CLIENTS */}
+          {activeTab === 'reviews' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <h2 className="text-2xl font-black text-slate-800 mb-6">Avis Clients ⭐</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 text-center">
+                  <p className="text-3xl font-black text-yellow-500">4.8</p>
+                  <p className="text-xs text-slate-400 font-bold mt-1">Note moyenne</p>
+                  <div className="flex justify-center gap-1 mt-2">{'⭐⭐⭐⭐⭐'.split('').map((s,i) => <span key={i} className={i < 5 ? '' : 'opacity-30'}>{s}</span>)}</div>
+                </div>
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 text-center">
+                  <p className="text-3xl font-black text-indigo-600">156</p>
+                  <p className="text-xs text-slate-400 font-bold mt-1">Total avis</p>
+                </div>
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 text-center">
+                  <p className="text-3xl font-black text-green-500">23</p>
+                  <p className="text-xs text-slate-400 font-bold mt-1">Avec photos</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {[
+                  { name: 'Oumy Dia', rating: 5, text: 'Le meilleur Tiep de Dakar ! Livraison rapide, plat encore chaud.', time: 'Il y a 2h', photo: true },
+                  { name: 'Ibrahima Fall', rating: 4, text: 'Très bon mafé, portions généreuses. La sauce pourrait être plus épaisse.', time: 'Il y a 5h', photo: false },
+                  { name: 'Aminata Ndiaye', rating: 5, text: 'Yassa poulet excellent ! Je recommande à 100%', time: 'Hier', photo: true },
+                  { name: 'Moussa Gueye', rating: 3, text: 'Correct mais la livraison était un peu longue.', time: 'Il y a 2j', photo: false },
+                ].map((review, i) => (
+                  <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(review.name)}&background=6366f1&color=fff`} className="w-10 h-10 rounded-full" alt="" />
+                        <div>
+                          <p className="font-bold text-slate-800 text-sm">{review.name}</p>
+                          <p className="text-[10px] text-slate-400">{review.time}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-0.5">{'⭐'.repeat(review.rating).split('').map((s,j) => <span key={j} className="text-sm">{s}</span>)}</div>
+                    </div>
+                    <p className="text-sm text-slate-600">{review.text}</p>
+                    {review.photo && <div className="mt-3 w-20 h-20 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">📷</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
 
@@ -1357,6 +1461,537 @@ function HoraireManager() {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ===== STOCK MANAGER =====
+function StockManager() {
+  const [items, setItems] = useState([]);
+  const [lowStock, setLowStock] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadStock(); }, []);
+
+  const loadStock = async () => {
+    try {
+      const [all, low] = await Promise.all([stockAPI.getAll(), stockAPI.getLowStock()]);
+      setItems(all || []);
+      setLowStock(low || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const updateQty = async (menuItemId, quantity) => {
+    try {
+      await stockAPI.update(menuItemId, { quantity: parseInt(quantity) });
+      loadStock();
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>;
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Gestion des Stocks</h2>
+      <p className="text-sm text-slate-500 mb-6">Gérez la disponibilité de vos plats en temps réel</p>
+
+      {lowStock.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6">
+          <h3 className="text-sm font-bold text-red-700 mb-2">Stock bas ({lowStock.length} articles)</h3>
+          {lowStock.map((item, i) => (
+            <p key={i} className="text-xs text-red-600">{item.name || `Plat #${item.menu_item_id}`} - {item.quantity} restant(s)</p>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full">
+          <thead><tr className="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
+            <th className="px-6 py-3 text-left">Plat</th>
+            <th className="px-6 py-3 text-center">Stock actuel</th>
+            <th className="px-6 py-3 text-center">Seuil alerte</th>
+            <th className="px-6 py-3 text-center">Action</th>
+          </tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((item, i) => (
+              <tr key={i} className="hover:bg-slate-50">
+                <td className="px-6 py-4 text-sm font-medium text-slate-800">{item.name || `Plat #${item.menu_item_id}`}</td>
+                <td className="px-6 py-4 text-center">
+                  <input type="number" defaultValue={item.quantity} className="w-20 text-center bg-slate-50 rounded-lg px-2 py-1 text-sm border" onBlur={e => updateQty(item.menu_item_id, e.target.value)} />
+                </td>
+                <td className="px-6 py-4 text-center text-sm text-slate-500">{item.low_stock_threshold || 5}</td>
+                <td className="px-6 py-4 text-center">
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${item.quantity <= (item.low_stock_threshold || 5) ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                    {item.quantity <= 0 ? 'Rupture' : item.quantity <= (item.low_stock_threshold || 5) ? 'Bas' : 'OK'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {items.length === 0 && <p className="text-sm text-slate-400 text-center py-8">Aucun stock configuré. Ajoutez des quantités via le menu.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===== QR CODE MANAGER =====
+function QRCodeManager() {
+  const [qrCodes, setQrCodes] = useState([]);
+  const [tableNum, setTableNum] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadQR(); }, []);
+
+  const loadQR = async () => {
+    try {
+      const data = await qrCodeAPI.getMyQR();
+      setQrCodes(data || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const generate = async () => {
+    if (!tableNum.trim()) return;
+    try {
+      await qrCodeAPI.generate(tableNum);
+      setTableNum('');
+      loadQR();
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  const remove = async (id) => {
+    if (!confirm('Supprimer ce QR code ?')) return;
+    try {
+      await qrCodeAPI.remove(id);
+      loadQR();
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>;
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">QR Codes - Tables</h2>
+      <p className="text-sm text-slate-500 mb-6">Générez des QR codes pour que vos clients commandent depuis leur table</p>
+
+      <div className="flex gap-3 mb-6">
+        <input type="text" value={tableNum} onChange={e => setTableNum(e.target.value)} placeholder="N° de table (ex: A1, B3)" className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+        <button onClick={generate} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm transition-colors">Générer QR</button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {qrCodes.map((qr, i) => (
+          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 text-center">
+            <div className="w-24 h-24 bg-slate-100 rounded-xl mx-auto mb-3 flex items-center justify-center">
+              <span className="text-4xl">📱</span>
+            </div>
+            <h4 className="font-bold text-slate-800">Table {qr.table_number}</h4>
+            <p className="text-xs text-slate-400 mt-1">ID: {qr.id}</p>
+            <button onClick={() => remove(qr.id)} className="mt-3 text-xs text-red-500 font-bold hover:text-red-700">Supprimer</button>
+          </div>
+        ))}
+      </div>
+      {qrCodes.length === 0 && <p className="text-sm text-slate-400 text-center py-8">Aucun QR code. Générez-en pour vos tables.</p>}
+    </div>
+  );
+}
+
+// ===== STORIES MANAGER =====
+function StoriesManager() {
+  const [stories, setStories] = useState([]);
+  const [form, setForm] = useState({ image_url: '', caption: '' });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadStories(); }, []);
+
+  const loadStories = async () => {
+    try {
+      const data = await storiesAPI.getActive();
+      setStories(data || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const createStory = async () => {
+    if (!form.image_url) return alert('URL image requise');
+    try {
+      await storiesAPI.create(form);
+      setForm({ image_url: '', caption: '' });
+      loadStories();
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>;
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Stories</h2>
+      <p className="text-sm text-slate-500 mb-6">Publiez des stories éphémères (plat du jour, promos flash)</p>
+
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6 space-y-3">
+        <input type="text" value={form.image_url} onChange={e => setForm({...form, image_url: e.target.value})} placeholder="URL de l'image" className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm outline-none" />
+        <input type="text" value={form.caption} onChange={e => setForm({...form, caption: e.target.value})} placeholder="Légende (optionnel)" className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm outline-none" />
+        <button onClick={createStory} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm w-full transition-colors">Publier la story</button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {stories.map((s, i) => (
+          <div key={i} className="relative rounded-2xl overflow-hidden shadow-sm border border-slate-200">
+            <img src={s.image_url} alt={s.caption} className="w-full h-48 object-cover" />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 p-4">
+              <p className="text-white text-sm font-bold">{s.caption || 'Sans légende'}</p>
+              <p className="text-white/60 text-xs">{s.views_count || 0} vues</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      {stories.length === 0 && <p className="text-sm text-slate-400 text-center py-8">Aucune story active</p>}
+    </div>
+  );
+}
+
+// ===== CATERING MANAGER =====
+function CateringManager() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadRequests(); }, []);
+
+  const loadRequests = async () => {
+    try {
+      const data = await cateringAPI.getRequests();
+      setRequests(data.data || data || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const respond = async (id, status) => {
+    try {
+      await cateringAPI.respond(id, status);
+      loadRequests();
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  const statusColors = { pending: 'bg-yellow-100 text-yellow-700', accepted: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', completed: 'bg-blue-100 text-blue-700' };
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>;
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Demandes Traiteur</h2>
+      <p className="text-sm text-slate-500 mb-6">Gérez les demandes d'événements et commandes groupées</p>
+
+      <div className="space-y-4">
+        {requests.map((r, i) => (
+          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="font-bold text-slate-800">{r.client_name || `Client #${r.client_id}`}</h3>
+                <p className="text-sm text-slate-500">{new Date(r.event_date).toLocaleDateString('fr-FR')} - {r.guest_count} invités</p>
+                {r.budget && <p className="text-sm font-bold text-indigo-600 mt-1">Budget: {parseFloat(r.budget).toLocaleString()} FCFA</p>}
+                {r.notes && <p className="text-xs text-slate-400 mt-2 italic">"{r.notes}"</p>}
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColors[r.status]}`}>{r.status}</span>
+            </div>
+            {r.status === 'pending' && (
+              <div className="flex gap-3">
+                <button onClick={() => respond(r.id, 'accepted')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl font-bold text-sm transition-colors">Accepter</button>
+                <button onClick={() => respond(r.id, 'rejected')} className="flex-1 bg-red-100 hover:bg-red-200 text-red-600 py-2 rounded-xl font-bold text-sm transition-colors">Refuser</button>
+              </div>
+            )}
+          </div>
+        ))}
+        {requests.length === 0 && <p className="text-sm text-slate-400 text-center py-8">Aucune demande traiteur</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===== OPTIONS MANAGER =====
+function OptionsManager({ menuItems }) {
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [options, setOptions] = useState([]);
+  const [showAddOption, setShowAddOption] = useState(false);
+  const [optForm, setOptForm] = useState({ name: '', type: 'single', is_required: false });
+  const [valForm, setValForm] = useState({ name: '', price_extra: '' });
+  const [addingValueTo, setAddingValueTo] = useState(null);
+
+  const loadOptions = async (menuItemId) => {
+    try {
+      const data = await customizationAPI.getOptions(menuItemId);
+      setOptions(data || []);
+    } catch(e) { console.error(e); }
+  };
+
+  const selectItem = (item) => {
+    setSelectedItem(item);
+    loadOptions(item.id);
+  };
+
+  const addOption = async () => {
+    if (!optForm.name.trim()) return;
+    try {
+      await customizationAPI.createOption({ ...optForm, menu_item_id: selectedItem.id });
+      setOptForm({ name: '', type: 'single', is_required: false });
+      setShowAddOption(false);
+      loadOptions(selectedItem.id);
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  const deleteOption = async (id) => {
+    if (!confirm('Supprimer cette option ?')) return;
+    try {
+      await customizationAPI.deleteOption(id);
+      loadOptions(selectedItem.id);
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  const addValue = async (optionId) => {
+    if (!valForm.name.trim()) return;
+    try {
+      await customizationAPI.addValue(optionId, { name: valForm.name, price_extra: parseFloat(valForm.price_extra) || 0 });
+      setValForm({ name: '', price_extra: '' });
+      setAddingValueTo(null);
+      loadOptions(selectedItem.id);
+    } catch(e) { alert(e.message || 'Erreur'); }
+  };
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Options & Personnalisation</h2>
+      <p className="text-sm text-slate-500 mb-6">Ajoutez des options de personnalisation à vos plats (taille, suppléments, sauces...)</p>
+
+      {!selectedItem ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 divide-y">
+          {menuItems.map(item => (
+            <div key={item.id} onClick={() => selectItem(item)} className="flex items-center px-6 py-4 hover:bg-slate-50 cursor-pointer transition-colors">
+              <div className="flex-1">
+                <p className="font-medium text-slate-800">{item.name}</p>
+                <p className="text-xs text-slate-400">{item.category} - {parseFloat(item.price).toLocaleString()} FCFA</p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-300" />
+            </div>
+          ))}
+          {menuItems.length === 0 && <p className="text-sm text-slate-400 text-center py-8">Aucun plat dans le menu</p>}
+        </div>
+      ) : (
+        <div>
+          <button onClick={() => { setSelectedItem(null); setOptions([]); }} className="flex items-center text-sm text-slate-500 hover:text-slate-800 font-bold mb-4">
+            <ChevronLeft className="w-4 h-4 mr-1" /> Retour au menu
+          </button>
+
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-4">
+            <h3 className="font-bold text-slate-800 text-lg">{selectedItem.name}</h3>
+            <p className="text-sm text-slate-500">{selectedItem.category}</p>
+          </div>
+
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-slate-700">Groupes d'options</h3>
+            <button onClick={() => setShowAddOption(!showAddOption)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold">
+              {showAddOption ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {showAddOption && (
+            <div className="bg-slate-50 rounded-2xl p-4 mb-4 space-y-3">
+              <input type="text" value={optForm.name} onChange={e => setOptForm({...optForm, name: e.target.value})} placeholder="Nom du groupe (ex: Sauce, Taille)" className="w-full bg-white rounded-xl px-4 py-3 text-sm outline-none border" />
+              <div className="flex gap-3">
+                <select value={optForm.type} onChange={e => setOptForm({...optForm, type: e.target.value})} className="bg-white rounded-xl px-4 py-3 text-sm outline-none border">
+                  <option value="single">Choix unique</option>
+                  <option value="multiple">Choix multiples</option>
+                </select>
+                <label className="flex items-center text-sm"><input type="checkbox" checked={optForm.is_required} onChange={e => setOptForm({...optForm, is_required: e.target.checked})} className="mr-2" /> Obligatoire</label>
+              </div>
+              <button onClick={addOption} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold text-sm w-full">Créer le groupe</button>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {options.map(opt => (
+              <div key={opt.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <h4 className="font-bold text-slate-800">{opt.name}</h4>
+                    <p className="text-xs text-slate-400">{opt.type === 'single' ? 'Choix unique' : 'Choix multiples'} {opt.is_required ? '(obligatoire)' : ''}</p>
+                  </div>
+                  <button onClick={() => deleteOption(opt.id)} className="text-red-400 hover:text-red-600 text-xs font-bold">Supprimer</button>
+                </div>
+
+                <div className="space-y-2">
+                  {(opt.values || []).map(v => (
+                    <div key={v.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-2">
+                      <span className="text-sm text-slate-700">{v.name}</span>
+                      <span className="text-xs text-indigo-600 font-bold">{v.price_extra > 0 ? `+${parseFloat(v.price_extra).toLocaleString()} F` : 'Inclus'}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {addingValueTo === opt.id ? (
+                  <div className="flex gap-2 mt-3">
+                    <input type="text" value={valForm.name} onChange={e => setValForm({...valForm, name: e.target.value})} placeholder="Nom" className="flex-1 bg-slate-50 rounded-xl px-3 py-2 text-sm outline-none border" />
+                    <input type="number" value={valForm.price_extra} onChange={e => setValForm({...valForm, price_extra: e.target.value})} placeholder="Prix +" className="w-24 bg-slate-50 rounded-xl px-3 py-2 text-sm outline-none border" />
+                    <button onClick={() => addValue(opt.id)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold">OK</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setAddingValueTo(opt.id)} className="mt-3 text-xs text-indigo-600 font-bold hover:text-indigo-800">+ Ajouter une valeur</button>
+                )}
+              </div>
+            ))}
+            {options.length === 0 && <p className="text-sm text-slate-400 text-center py-6">Aucune option configurée pour ce plat</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Composant Analytiques Dashboard
+function AnalyticsDashboard() {
+  const [overview, setOverview] = useState(null);
+  const [popularItems, setPopularItems] = useState([]);
+  const [peakHours, setPeakHours] = useState([]);
+  const [revenueChart, setRevenueChart] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadAnalytics(); }, []);
+
+  const loadAnalytics = async () => {
+    try {
+      const [ov, pop, peak, rev] = await Promise.all([
+        analyticsAPI.getOverview().catch(() => null),
+        analyticsAPI.getPopularItems().catch(() => []),
+        analyticsAPI.getPeakHours().catch(() => []),
+        analyticsAPI.getRevenueChart().catch(() => []),
+      ]);
+      setOverview(ov);
+      setPopularItems(Array.isArray(pop) ? pop : pop?.items || []);
+      setPeakHours(Array.isArray(peak) ? peak : peak?.hours || []);
+      setRevenueChart(Array.isArray(rev) ? rev : rev?.data || []);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const fmt = (n) => {
+    if (n == null) return '—';
+    return Number(n).toLocaleString('fr-FR');
+  };
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>;
+
+  const overviewCards = [
+    { label: "Aujourd'hui", value: overview?.today ?? 0, color: 'bg-indigo-500', icon: DollarSign },
+    { label: 'Cette semaine', value: overview?.week ?? 0, color: 'bg-emerald-500', icon: TrendingUp },
+    { label: 'Ce mois', value: overview?.month ?? 0, color: 'bg-amber-500', icon: ShoppingBag },
+    { label: 'Total', value: overview?.total ?? 0, color: 'bg-slate-700', icon: Star },
+  ];
+
+  const maxPeakOrders = Math.max(...(peakHours.map(h => h.orders || h.count || 0)), 1);
+  const maxRevenue = Math.max(...(revenueChart.map(d => d.revenue || d.amount || 0)), 1);
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-1">Analytiques</h2>
+      <p className="text-sm text-slate-500 mb-6">Vue d'ensemble des performances de votre restaurant</p>
+
+      {/* Revenue Overview Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {overviewCards.map((card, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden">
+            <div className={`absolute top-0 right-0 w-20 h-20 ${card.color} opacity-10 rounded-bl-[40px]`} />
+            <div className={`w-10 h-10 ${card.color} rounded-xl flex items-center justify-center mb-3`}>
+              <card.icon className="w-5 h-5 text-white" />
+            </div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{card.label}</p>
+            <p className="text-2xl font-black text-slate-800 mt-1">{fmt(card.value)} <span className="text-sm font-medium text-slate-400">FCFA</span></p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+        {/* Popular Items */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Star className="w-5 h-5 text-amber-500" /> Top 10 Plats
+          </h3>
+          {popularItems.length === 0 && <p className="text-sm text-slate-400 text-center py-6">Aucune donnée disponible</p>}
+          <div className="space-y-3">
+            {popularItems.slice(0, 10).map((item, i) => {
+              const maxCount = Math.max(...popularItems.slice(0, 10).map(it => it.order_count || it.count || 0), 1);
+              const count = item.order_count || item.count || 0;
+              const pct = (count / maxCount) * 100;
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-black flex-shrink-0">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-sm font-semibold text-slate-700 truncate">{item.name || item.item_name || `Plat #${item.menu_item_id}`}</span>
+                      <span className="text-xs font-bold text-slate-500 ml-2 flex-shrink-0">{count} cmd</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Peak Hours */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-500" /> Heures de pointe
+          </h3>
+          {peakHours.length === 0 && <p className="text-sm text-slate-400 text-center py-6">Aucune donnée disponible</p>}
+          <div className="flex items-end gap-1 h-48">
+            {peakHours.map((h, i) => {
+              const orders = h.orders || h.count || 0;
+              const pct = (orders / maxPeakOrders) * 100;
+              const hour = h.hour != null ? h.hour : i;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group">
+                  <span className="text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">{orders}</span>
+                  <div
+                    className="w-full bg-indigo-500 rounded-t-md transition-all duration-300 hover:bg-indigo-600 min-h-[2px]"
+                    style={{ height: `${Math.max(pct, 2)}%` }}
+                    title={`${hour}h - ${orders} commandes`}
+                  />
+                  <span className="text-[9px] font-semibold text-slate-400">{hour}h</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Revenue Trend - Last 30 days */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-emerald-500" /> Tendance des revenus (30 derniers jours)
+        </h3>
+        {revenueChart.length === 0 && <p className="text-sm text-slate-400 text-center py-6">Aucune donnée disponible</p>}
+        <div className="flex items-end gap-[3px] h-52">
+          {revenueChart.map((d, i) => {
+            const rev = d.revenue || d.amount || 0;
+            const pct = (rev / maxRevenue) * 100;
+            const label = d.date || d.day || '';
+            const shortLabel = label.length > 5 ? label.slice(5) : label;
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group">
+                <span className="text-[9px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{fmt(rev)}</span>
+                <div
+                  className="w-full bg-emerald-400 rounded-t-md transition-all duration-300 hover:bg-emerald-500 min-h-[2px]"
+                  style={{ height: `${Math.max(pct, 1)}%` }}
+                  title={`${label} - ${fmt(rev)} FCFA`}
+                />
+                {i % 5 === 0 && <span className="text-[8px] font-semibold text-slate-400 whitespace-nowrap">{shortLabel}</span>}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
