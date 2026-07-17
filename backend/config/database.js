@@ -483,7 +483,7 @@ async function _createPostgresTables(client) {
   await client.query(`CREATE TABLE IF NOT EXISTS split_payment_shares (id SERIAL PRIMARY KEY, split_payment_id INTEGER NOT NULL REFERENCES split_payments(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id), amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) DEFAULT 'pending', paid_at TIMESTAMP)`);
 
   // Wave 3 tables
-  await client.query(`CREATE TABLE IF NOT EXISTS photo_reviews (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), order_id INTEGER REFERENCES orders(id), restaurant_id INTEGER REFERENCES restaurants(id), rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5), comment TEXT, photo_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS photo_reviews (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), order_id INTEGER REFERENCES orders(id), restaurant_id INTEGER REFERENCES users(id), rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5), comment TEXT, photo_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await client.query(`CREATE TABLE IF NOT EXISTS push_notifications (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), title VARCHAR(200) NOT NULL, body TEXT, icon VARCHAR(10) DEFAULT '🔔', type VARCHAR(30) DEFAULT 'general', read BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 
   // Add new columns to existing tables
