@@ -29,7 +29,9 @@ module.exports = {
     },
     web: {
       favicon: "./assets/favicon.png",
-      baseUrl: "/livreur/",
+    },
+    experiments: {
+      baseUrl: "/livreur",
     },
     extra: {
       eas: { projectId: "78862722-d3f2-4d56-85fa-fd481b5521f0" },
