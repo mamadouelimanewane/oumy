@@ -168,8 +168,8 @@ export const orderExtrasAPI = {
 // Wallet API
 export const walletAPI = {
   getBalance: () => fetchWithAuth('/wallet/balance'),
-  deposit: (amount, method) => fetchWithAuth('/wallet/deposit', { method: 'POST', body: JSON.stringify({ amount, method }) }),
-  withdraw: (amount, method) => fetchWithAuth('/wallet/withdraw', { method: 'POST', body: JSON.stringify({ amount, method }) }),
+  deposit: (amount, payment_method, transaction_ref) => fetchWithAuth('/wallet/deposit', { method: 'POST', body: JSON.stringify({ amount, payment_method, transaction_ref }) }),
+  withdraw: (amount, payment_method, phone_number) => fetchWithAuth('/wallet/withdraw', { method: 'POST', body: JSON.stringify({ amount, payment_method, phone_number }) }),
   getTransactions: (params = {}) => { const q = new URLSearchParams(params).toString(); return fetchWithAuth(`/wallet/transactions?${q}`); },
   pay: (order_id, amount) => fetchWithAuth('/wallet/pay', { method: 'POST', body: JSON.stringify({ order_id, amount }) }),
 };

@@ -27,7 +27,7 @@ import {
   AlertTriangle,
   Plus
 } from 'lucide-react';
-import { authAPI, adminAPI, notificationsAPI, createSocketConnection, payoutsAPI, promotionsAPI, supportAPI, fraudAPI, deliveryZoneAPI, gamificationAPI, subscriptionAPI } from './api';
+import { authAPI, adminAPI, notificationsAPI, createSocketConnection, payoutsAPI, depositsAPI, promotionsAPI, supportAPI, fraudAPI, deliveryZoneAPI, gamificationAPI, subscriptionAPI } from './api';
 
 // --- Fleet Map Component (Leaflet/OpenStreetMap - no API key needed) ---
 function FleetMap({ couriersLocs, history = [], selectedCourierId = null, hotspots = [] }) {
@@ -254,6 +254,7 @@ function App() {
   const [clients, setClients] = useState({ data: [], pagination: {} });
   const [orders, setOrders] = useState({ data: [], pagination: {} });
   const [payouts, setPayouts] = useState([]);
+  const [deposits, setDeposits] = useState([]);
   const [promos, setPromos] = useState({ data: [], pagination: {} });
   const [unreadCount, setUnreadCount] = useState(0);
   const [fleetLocs, setFleetLocs] = useState({});
@@ -338,6 +339,13 @@ function App() {
     } catch (err) { console.error(err); }
   }, []);
 
+  const fetchDeposits = useCallback(async () => {
+    try {
+      const data = await depositsAPI.getPending();
+      if (data) setDeposits(data);
+    } catch (err) { console.error(err); }
+  }, []);
+
   const fetchPromos = useCallback(async (page = 1) => {
     try {
       const data = await promotionsAPI.getAll(page);
@@ -378,8 +386,9 @@ function App() {
     if (user && activeTab === 'clients') fetchClients();
     if (user && activeTab === 'orders') fetchOrders();
     if (user && activeTab === 'payouts') fetchPayouts();
+    if (user && activeTab === 'deposits') fetchDeposits();
     if (user && activeTab === 'promotions') fetchPromos();
-  }, [user, activeTab, fetchRestaurants, fetchCouriers, fetchClients, fetchOrders, fetchPayouts, fetchPromos]);
+  }, [user, activeTab, fetchRestaurants, fetchCouriers, fetchClients, fetchOrders, fetchPayouts, fetchDeposits, fetchPromos]);
 
   const handleLogin = (userData, tokenData) => { setUser(userData); setToken(tokenData); };
 
@@ -404,6 +413,13 @@ function App() {
     try {
       await payoutsAPI.updateStatus(id, status, ref);
       fetchPayouts();
+    } catch (err) { console.error(err); }
+  };
+
+  const handleUpdateDeposit = async (id, status) => {
+    try {
+      await depositsAPI.updateStatus(id, status);
+      fetchDeposits();
     } catch (err) { console.error(err); }
   };
 
@@ -512,6 +528,7 @@ function App() {
           {[
             { id: 'orders', icon: ShoppingBag, label: 'Commandes' },
             { id: 'payouts', icon: Wallet, label: 'Retraits (Approb.)' },
+            { id: 'deposits', icon: Wallet, label: 'Dépôts (Approb.)' },
             { id: 'promotions', icon: Tag, label: 'Codes Promo' },
             { id: 'fraud', icon: AlertTriangle, label: 'Fraude & Alertes' },
             { id: 'support', icon: Phone, label: 'Support Tickets' },
@@ -1042,6 +1059,53 @@ function App() {
                       ))}
                       {payouts.length === 0 && (
                         <tr><td colSpan="7" className="py-20 text-center text-slate-500 italic">Aucune demande en attente</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* === DEPOSITS (APPROVALS) === */}
+          {activeTab === 'deposits' && (
+            <div className="relative z-10 animate-in fade-in duration-500">
+               <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Dépôts en attente</h2>
+               <p className="text-sm text-slate-500 mb-6">Vérifiez la référence de transaction reçue par SMS avant de confirmer.</p>
+               <div className="glass-panel rounded-2xl overflow-hidden border border-slate-700/30">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-800/30 text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700/50">
+                        <th className="px-6 py-4 font-bold">Utilisateur</th>
+                        <th className="px-6 py-4 font-bold">Montant</th>
+                        <th className="px-6 py-4 font-bold">Méthode</th>
+                        <th className="px-6 py-4 font-bold">Référence</th>
+                        <th className="px-6 py-4 font-bold">Date</th>
+                        <th className="px-6 py-4 font-bold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deposits.map(d => (
+                        <tr key={d.id} className="border-b border-slate-700/30 hover:bg-slate-800/30 transition-colors">
+                          <td className="px-6 py-4">
+                             <p className="text-sm font-bold text-white">{d.user_name}</p>
+                             <p className="text-[10px] text-slate-500">{d.user_phone}</p>
+                          </td>
+                          <td className="px-6 py-4 text-sm font-black text-white">{formatPrice(d.amount)}</td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">{d.payment_method}</td>
+                          <td className="px-6 py-4 text-xs font-mono text-slate-300">{d.transaction_ref}</td>
+                          <td className="px-6 py-4 text-[10px] text-slate-500">{formatDate(d.created_at)}</td>
+                          <td className="px-6 py-4 text-right">
+                             <div className="flex justify-end gap-2">
+                                <button onClick={() => handleUpdateDeposit(d.id, 'rejected')} className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20"><X className="w-4 h-4" /></button>
+                                <button onClick={() => handleUpdateDeposit(d.id, 'completed')} className="p-2 bg-green-500/10 text-green-500 rounded-lg hover:bg-green-500/20"><Check className="w-4 h-4" /></button>
+                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {deposits.length === 0 && (
+                        <tr><td colSpan="6" className="py-20 text-center text-slate-500 italic">Aucun dépôt en attente</td></tr>
                       )}
                     </tbody>
                   </table>

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 // Subscribe to push notifications
 router.post('/subscribe', authenticate, async (req, res) => {
@@ -54,7 +54,7 @@ router.put('/read-all', authenticate, async (req, res) => {
 });
 
 // Create notification (internal/admin use)
-router.post('/create', authenticate, async (req, res) => {
+router.post('/create', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { user_id, title, body, icon, type } = req.body;
     const result = await pool.query(

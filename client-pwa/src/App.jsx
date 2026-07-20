@@ -2321,6 +2321,7 @@ function WalletPage({ user }) {
   const [transactions, setTransactions] = useState([]);
   const [depositAmount, setDepositAmount] = useState('');
   const [depositMethod, setDepositMethod] = useState('wave');
+  const [depositRef, setDepositRef] = useState('');
   const [loading, setLoading] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
 
@@ -2340,12 +2341,15 @@ function WalletPage({ user }) {
 
   const handleDeposit = async () => {
     if (!depositAmount || parseFloat(depositAmount) < 100) return alert('Montant minimum 100 FCFA');
+    if (!depositRef.trim()) return alert('Indiquez la référence de la transaction reçue par SMS après votre paiement');
     setLoading(true);
     try {
       const { walletAPI } = await import('./api');
-      await walletAPI.deposit(parseFloat(depositAmount), depositMethod);
+      await walletAPI.deposit(parseFloat(depositAmount), depositMethod, depositRef.trim());
       setDepositAmount('');
+      setDepositRef('');
       setShowDeposit(false);
+      alert('Dépôt enregistré, en attente de vérification. Il sera crédité une fois le paiement confirmé.');
       loadWallet();
     } catch(e) { alert(e.message); }
     setLoading(false);
@@ -2380,6 +2384,10 @@ function WalletPage({ user }) {
               </button>
             ))}
           </div>
+          <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+            Envoyez d'abord le montant via {depositMethod === 'wave' ? 'Wave' : 'Orange Money'}, puis indiquez ci-dessous la référence reçue par SMS pour vérification.
+          </p>
+          <input type="text" value={depositRef} onChange={e => setDepositRef(e.target.value)} placeholder="Référence de transaction (SMS)" className="w-full bg-neutral-50 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none mb-4" />
           <button onClick={handleDeposit} disabled={loading} className="w-full bg-primary text-white font-black py-4 rounded-2xl shadow-lg shadow-primary/20 disabled:opacity-50">
             {loading ? 'Chargement...' : 'Confirmer le dépôt'}
           </button>

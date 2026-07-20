@@ -88,6 +88,9 @@ if (USE_POSTGRES) {
     s = s.replace(/EXTRACT\(DOW FROM CURRENT_TIMESTAMP\)/gi, "CAST(strftime('%w','now') AS INTEGER)");
     s = s.replace(/\bCURRENT_TIME\b/g, "strftime('%H:%M','now')");
     s = s.replace(/ON DELETE CASCADE/gi, '');
+    s = s.replace(/\bNOW\(\)/gi, 'CURRENT_TIMESTAMP');
+    // SQLite (better-sqlite3) has no row locking - safe to drop, single writer connection
+    s = s.replace(/\s+FOR UPDATE\b/gi, '');
     // Remove RETURNING clause - we handle it separately
     s = s.replace(/\s+RETURNING\s+.*/gi, '');
     return s;
@@ -263,6 +266,10 @@ if (USE_POSTGRES) {
         id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES orders(id),
         sender_id INTEGER NOT NULL REFERENCES users(id), message TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+      `CREATE TABLE IF NOT EXISTS push_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id),
+        title TEXT NOT NULL, body TEXT, icon TEXT DEFAULT '🔔', type TEXT DEFAULT 'general',
+        read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
       `CREATE TABLE IF NOT EXISTS loyalty_points (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id),
         points INTEGER NOT NULL, type TEXT NOT NULL CHECK(type IN ('earned','redeemed','bonus','referral')),
@@ -276,13 +283,15 @@ if (USE_POSTGRES) {
         latitude REAL NOT NULL, longitude REAL NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
       `CREATE TABLE IF NOT EXISTS wallets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id),
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
         balance REAL DEFAULT 0, currency TEXT DEFAULT 'XOF',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
       `CREATE TABLE IF NOT EXISTS wallet_transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, wallet_id INTEGER NOT NULL REFERENCES wallets(id),
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id),
         type TEXT CHECK(type IN ('deposit','withdrawal','payment','cashback','refund')),
-        amount REAL NOT NULL, description TEXT, reference_id TEXT,
+        amount REAL NOT NULL, payment_method TEXT, transaction_ref TEXT UNIQUE,
+        phone_number TEXT, order_id INTEGER REFERENCES orders(id),
+        description TEXT, status TEXT DEFAULT 'completed',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
       `CREATE TABLE IF NOT EXISTS menu_item_options (
         id INTEGER PRIMARY KEY AUTOINCREMENT, menu_item_id INTEGER NOT NULL REFERENCES menu_items(id),
@@ -446,7 +455,7 @@ async function _createPostgresTables(client) {
   await client.query(`CREATE TABLE IF NOT EXISTS courier_location_history (id SERIAL PRIMARY KEY, courier_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, latitude DECIMAL(10,8) NOT NULL, longitude DECIMAL(11,8) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   // ===== NEW FEATURE TABLES =====
   await client.query(`CREATE TABLE IF NOT EXISTS wallets (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) UNIQUE, balance DECIMAL(10,2) DEFAULT 0, currency VARCHAR(10) DEFAULT 'XOF', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
-  await client.query(`CREATE TABLE IF NOT EXISTS wallet_transactions (id SERIAL PRIMARY KEY, wallet_id INTEGER NOT NULL REFERENCES wallets(id), type VARCHAR(20) NOT NULL CHECK(type IN ('deposit','withdrawal','payment','cashback','refund')), amount DECIMAL(10,2) NOT NULL, description TEXT, reference_id VARCHAR(100), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS wallet_transactions (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), type VARCHAR(20) NOT NULL CHECK(type IN ('deposit','withdrawal','payment','cashback','refund')), amount DECIMAL(10,2) NOT NULL, payment_method VARCHAR(20), transaction_ref VARCHAR(100) UNIQUE, phone_number VARCHAR(20), order_id INTEGER REFERENCES orders(id), description TEXT, status VARCHAR(20) DEFAULT 'completed', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await client.query(`CREATE TABLE IF NOT EXISTS menu_item_options (id SERIAL PRIMARY KEY, menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE, name VARCHAR(100) NOT NULL, type VARCHAR(20) DEFAULT 'single' CHECK(type IN ('single','multiple')), is_required BOOLEAN DEFAULT false, max_selections INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await client.query(`CREATE TABLE IF NOT EXISTS menu_item_option_values (id SERIAL PRIMARY KEY, option_id INTEGER NOT NULL REFERENCES menu_item_options(id) ON DELETE CASCADE, name VARCHAR(100) NOT NULL, price_extra DECIMAL(10,2) DEFAULT 0, is_default BOOLEAN DEFAULT false, is_available BOOLEAN DEFAULT true)`);
   await client.query(`CREATE TABLE IF NOT EXISTS order_item_options (id SERIAL PRIMARY KEY, order_item_id INTEGER NOT NULL REFERENCES order_items(id) ON DELETE CASCADE, option_name VARCHAR(100), value_name VARCHAR(100), price_extra DECIMAL(10,2) DEFAULT 0)`);

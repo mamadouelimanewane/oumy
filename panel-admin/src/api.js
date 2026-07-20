@@ -105,6 +105,20 @@ export const payoutsAPI = {
   },
 };
 
+export const depositsAPI = {
+  getPending: async () => {
+    const res = await fetchWithAuth('/wallet/deposits/pending');
+    return res.json();
+  },
+  updateStatus: async (id, status) => {
+    const res = await fetchWithAuth(`/wallet/deposits/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return res.json();
+  },
+};
+
 export const promotionsAPI = {
   getAll: async (page = 1) => {
     const res = await fetchWithAuth(`/promotions?page=${page}&limit=20`);

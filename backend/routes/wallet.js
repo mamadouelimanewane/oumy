@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { paginate, paginatedResponse } = require('../middleware/pagination');
 
 const router = express.Router();
@@ -37,7 +37,12 @@ router.get('/balance', async (req, res) => {
   }
 });
 
-// Deposer de l'argent (Wave / Orange Money)
+// Declarer un depot d'argent (Wave / Orange Money) - EN ATTENTE de verification admin.
+// Il n'existe pas encore d'integration reelle avec les APIs Wave/Orange Money pour
+// confirmer automatiquement qu'un paiement a bien eu lieu : crediter le wallet des
+// reception de cette requete reviendrait a laisser n'importe quel utilisateur se
+// crediter gratuitement avec une reference inventee. Le solde n'est donc mis a jour
+// qu'apres validation manuelle par un admin (memes routes que payouts.js).
 router.post('/deposit', [
   body('amount').isFloat({ min: 100 }).withMessage('Montant minimum 100 FCFA'),
   body('payment_method').isIn(['wave', 'orange_money']).withMessage('Methode de paiement invalide'),
@@ -59,45 +64,103 @@ router.post('/deposit', [
       return res.status(400).json({ error: 'Cette reference de transaction a deja ete utilisee' });
     }
 
+    // Enregistrer la transaction en attente (le solde n'est pas encore credite)
+    const txResult = await pool.query(
+      `INSERT INTO wallet_transactions (user_id, type, amount, payment_method, transaction_ref, description, status)
+       VALUES ($1, 'deposit', $2, $3, $4, $5, 'pending')
+       RETURNING *`,
+      [req.user.id, amount, payment_method, transaction_ref, `Depot via ${payment_method} - en attente de verification`]
+    );
+
+    res.status(201).json({
+      message: `Depot de ${amount} FCFA enregistre, en attente de verification. Il sera credite une fois le paiement confirme.`,
+      transaction: txResult.rows[0],
+    });
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Reference de transaction dupliquee' });
+    console.error('Wallet deposit error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// === ROUTES ADMIN ===
+
+// Lister les depots en attente de verification (admin seulement)
+router.get('/deposits/pending', authorize('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT wt.*, u.name as user_name, u.phone as user_phone
+       FROM wallet_transactions wt
+       JOIN users u ON wt.user_id = u.id
+       WHERE wt.type = 'deposit' AND wt.status = 'pending'
+       ORDER BY wt.created_at ASC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get pending deposits error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Valider ou rejeter un depot (admin seulement) - c'est ce qui credite reellement le wallet
+router.put('/deposits/:id', authorize('admin'), [
+  body('status').isIn(['completed', 'rejected']).withMessage('Statut invalide'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { status } = req.body;
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Creer le wallet s'il n'existe pas
-      await client.query(
-        `INSERT INTO wallets (user_id, balance)
-         VALUES ($1, 0)
-         ON CONFLICT (user_id) DO NOTHING`,
-        [req.user.id]
-      );
-
-      // Crediter le wallet
-      await client.query(
-        'UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2',
-        [amount, req.user.id]
-      );
-
-      // Enregistrer la transaction
       const txResult = await client.query(
-        `INSERT INTO wallet_transactions (user_id, type, amount, payment_method, transaction_ref, description, status)
-         VALUES ($1, 'deposit', $2, $3, $4, $5, 'completed')
-         RETURNING *`,
-        [req.user.id, amount, payment_method, transaction_ref, `Depot via ${payment_method}`]
+        `SELECT * FROM wallet_transactions WHERE id = $1 AND type = 'deposit' FOR UPDATE`,
+        [req.params.id]
       );
 
-      // Recuperer le nouveau solde
-      const walletResult = await client.query(
-        'SELECT balance FROM wallets WHERE user_id = $1',
-        [req.user.id]
+      if (txResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Depot introuvable' });
+      }
+
+      const tx = txResult.rows[0];
+      if (tx.status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Ce depot a deja ete traite' });
+      }
+
+      if (status === 'completed') {
+        await client.query(
+          `INSERT INTO wallets (user_id, balance) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING`,
+          [tx.user_id]
+        );
+        await client.query(
+          'UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2',
+          [tx.amount, tx.user_id]
+        );
+      }
+
+      await client.query(
+        `UPDATE wallet_transactions SET status = $1 WHERE id = $2`,
+        [status, tx.id]
       );
 
       await client.query('COMMIT');
 
-      res.json({
-        message: `Depot de ${amount} FCFA effectue avec succes`,
-        transaction: txResult.rows[0],
-        new_balance: parseFloat(walletResult.rows[0].balance),
-      });
+      if (req.io) {
+        req.io.to(`user_${tx.user_id}`).emit('notification', {
+          type: 'deposit_update',
+          title: status === 'completed' ? 'Depot confirme ✅' : 'Depot rejete ❌',
+          message: status === 'completed'
+            ? `Votre depot de ${tx.amount} FCFA a ete credite.`
+            : `Votre depot de ${tx.amount} FCFA a ete rejete. Contactez le support.`,
+        });
+      }
+
+      res.json({ message: 'Depot mis a jour', status });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -105,8 +168,7 @@ router.post('/deposit', [
       client.release();
     }
   } catch (err) {
-    if (err.code === '23505') return res.status(400).json({ error: 'Reference de transaction dupliquee' });
-    console.error('Wallet deposit error:', err);
+    console.error('Update deposit error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -306,17 +368,30 @@ router.post('/pay', [
   }
 });
 
-// Ajouter du cashback apres une commande (usage interne)
+// Ajouter du cashback apres une commande livree
 router.post('/cashback', [
   body('order_id').isInt({ min: 1 }).withMessage('ID de commande invalide'),
-  body('order_amount').isFloat({ min: 1 }).withMessage('Montant de commande invalide'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { order_id, order_amount } = req.body;
+    const { order_id } = req.body;
 
+    // Verifier que la commande appartient bien a l'utilisateur et est livree,
+    // et utiliser son montant reel plutot que de faire confiance a une valeur
+    // envoyee par le client (qui pourrait sinon reclamer du cashback sur un
+    // montant invente pour n'importe quel order_id).
+    const orderCheck = await pool.query(
+      `SELECT total_amount FROM orders WHERE id = $1 AND client_id = $2 AND status = 'livree'`,
+      [order_id, req.user.id]
+    );
+
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Commande introuvable ou pas encore livree' });
+    }
+
+    const order_amount = parseFloat(orderCheck.rows[0].total_amount);
     const cashbackAmount = Math.floor(order_amount * CASHBACK_RATE);
     if (cashbackAmount <= 0) {
       return res.json({ message: 'Montant de cashback trop faible', cashback: 0 });
