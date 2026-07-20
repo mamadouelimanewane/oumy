@@ -393,6 +393,20 @@ function App() {
     }
   }, []);
 
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const data = await analyticsAPI.getRevenueChart();
+      const revenue_by_day = (data?.revenue_chart || []).map((d) => ({
+        date: d.date,
+        revenue: Number(d.revenue) || 0,
+        orders: Number(d.order_count) || 0,
+      }));
+      setAnalytics({ revenue_by_day });
+    } catch (err) {
+      console.error('Fetch analytics error:', err);
+    }
+  }, []);
+
   const fetchPromos = useCallback(async () => {
     try {
       const data = await promotionsAPI.getAll();
@@ -429,7 +443,7 @@ function App() {
       const interval = setInterval(fetchOrders, 30000);
       return () => clearInterval(interval);
     }
-  }, [user, activeTab, fetchOrders, fetchMenu, fetchStats, fetchUnreadCount]);
+  }, [user, activeTab, fetchOrders, fetchMenu, fetchStats, fetchUnreadCount, fetchAnalytics, fetchPayouts, fetchPromos]);
 
   const handleLogin = (userData, tokenData) => {
     setUser(userData);
