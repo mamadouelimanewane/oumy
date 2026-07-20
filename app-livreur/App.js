@@ -39,30 +39,35 @@ export default function App() {
   // 1. INITIALISATION LOCATION & SOCKET
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert("Permission refusée", "L'accès à la localisation est requis.");
-        return;
-      }
-
-      let currentLoc = await Location.getCurrentPositionAsync({});
-      setLocation(currentLoc.coords);
-      setLoading(false);
-
-      // Monitoring permanent de la position
-      Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 10 },
-        (newLoc) => {
-          setLocation(newLoc.coords);
-          if (isOnline && socketRef.current) {
-            socketRef.current.emit('courier_location', {
-              latitude: newLoc.coords.latitude,
-              longitude: newLoc.coords.longitude,
-              orderId: order?.id
-            });
-          }
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert("Permission refusée", "L'accès à la localisation est requis.");
+          return;
         }
-      );
+
+        let currentLoc = await Location.getCurrentPositionAsync({});
+        setLocation(currentLoc.coords);
+
+        // Monitoring permanent de la position
+        Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+          (newLoc) => {
+            setLocation(newLoc.coords);
+            if (isOnline && socketRef.current) {
+              socketRef.current.emit('courier_location', {
+                latitude: newLoc.coords.latitude,
+                longitude: newLoc.coords.longitude,
+                orderId: order?.id
+              });
+            }
+          }
+        );
+      } catch (err) {
+        console.error("Erreur localisation:", err);
+      } finally {
+        setLoading(false);
+      }
     })();
 
     // Simulation d'un Token (Normalement via Login)
