@@ -1,26 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions, Animated, Easing, Alert, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Dimensions, Animated, Alert, ActivityIndicator, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import { io } from 'socket.io-client';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import polyline from '@mapbox/polyline';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import MapView, { Marker, Polyline } from './components/MapView';
+import { SOCKET_URL, TOKEN_KEY, USER_KEY, authAPI, livreurAPI, tipsAPI } from './api';
 
 const { width, height } = Dimensions.get('window');
 
-// CONFIGURATION
-const DEFAULT_API_URL = 'http://localhost:5000';
-const PROD_API_URL = 'https://oumy-orpin.vercel.app/api'; // Modifier si different
-const API_URL = (typeof window !== 'undefined' && window.location.hostname !== 'localhost') 
-  ? (window.location.origin.includes('vercel.app') ? window.location.origin + '/api' : PROD_API_URL)
-  : DEFAULT_API_URL;
 const LOCATIONIQ_KEY = Constants.expoConfig.extra.LOCATIONIQ_API_KEY;
+const DAKAR_CENTER = { latitude: 14.6937, longitude: -17.4441 };
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10;
+}
 
 export default function App() {
+  // AUTH
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  // APP STATE
   const [isOnline, setIsOnline] = useState(false);
   const [deliveryState, setDeliveryState] = useState('idle'); // 'idle', 'incoming', 'accepted', 'pickup', 'delivering', 'completed'
   const [location, setLocation] = useState(null);
@@ -29,14 +45,42 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [tips, setTips] = useState({ tips: [], total: 0 });
   const [showTips, setShowTips] = useState(false);
-  const [todayEarnings, setTodayEarnings] = useState(15400);
+  const [todayEarnings, setTodayEarnings] = useState(0);
 
   const mapRef = useRef(null);
   const socketRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(height)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // 1. INITIALISATION LOCATION & SOCKET
+  // Refs miroir pour eviter de recreer le socket a chaque changement d'etat
+  // (le handler 'new_order_available' doit toujours lire l'etat le plus recent).
+  const isOnlineRef = useRef(isOnline);
+  const deliveryStateRef = useRef(deliveryState);
+  const orderRef = useRef(order);
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
+  useEffect(() => { deliveryStateRef.current = deliveryState; }, [deliveryState]);
+  useEffect(() => { orderRef.current = order; }, [order]);
+
+  // 0. RESTAURATION DE SESSION
+  useEffect(() => {
+    (async () => {
+      try {
+        const [token, userJson] = await Promise.all([
+          AsyncStorage.getItem(TOKEN_KEY),
+          AsyncStorage.getItem(USER_KEY),
+        ]);
+        if (token && userJson) {
+          setAuthToken(token);
+          setAuthUser(JSON.parse(userJson));
+        }
+      } catch (err) {
+        console.error('Erreur session:', err);
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
+  }, []);
+
+  // 1. GÉOLOCALISATION
   useEffect(() => {
     (async () => {
       try {
@@ -49,16 +93,15 @@ export default function App() {
         let currentLoc = await Location.getCurrentPositionAsync({});
         setLocation(currentLoc.coords);
 
-        // Monitoring permanent de la position
         Location.watchPositionAsync(
           { accuracy: Location.Accuracy.High, distanceInterval: 10 },
           (newLoc) => {
             setLocation(newLoc.coords);
-            if (isOnline && socketRef.current) {
+            if (isOnlineRef.current && socketRef.current) {
               socketRef.current.emit('courier_location', {
                 latitude: newLoc.coords.latitude,
                 longitude: newLoc.coords.longitude,
-                orderId: order?.id
+                orderId: orderRef.current?.id,
               });
             }
           }
@@ -69,28 +112,58 @@ export default function App() {
         setLoading(false);
       }
     })();
+  }, []);
 
-    // Simulation d'un Token (Normalement via Login)
-    const token = "MOCK_TOKEN_LIVREUR"; 
-    socketRef.current = io(API_URL, {
-      auth: { token },
-      transports: ['websocket']
+  // 2. SOCKET.IO — connexion reelle une fois authentifie (JWT, plus de mock)
+  useEffect(() => {
+    if (!authToken) return;
+
+    socketRef.current = io(SOCKET_URL, {
+      auth: { token: authToken },
+      transports: ['websocket'],
     });
 
     socketRef.current.on('new_order_available', (newOrder) => {
-      if (isOnline && deliveryState === 'idle') {
+      if (isOnlineRef.current && deliveryStateRef.current === 'idle') {
         setOrder(newOrder);
         setDeliveryState('incoming');
         showBottomSheet();
       }
     });
 
-    return () => socketRef.current?.disconnect();
-  }, [isOnline, order, deliveryState]);
+    return () => {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, [authToken]);
 
-  // 2. LOGIQUE ITINÉRAIRE (LocationIQ)
+  // 3. DONNÉES INITIALES : gains du jour + livraison deja en cours (reprise apres fermeture app)
+  useEffect(() => {
+    if (!authToken) return;
+    (async () => {
+      try {
+        const stats = await livreurAPI.getStats();
+        setTodayEarnings(parseFloat(stats?.today?.total_amount) || 0);
+      } catch (err) {
+        console.error('Erreur stats:', err);
+      }
+      try {
+        const current = await livreurAPI.getCurrentOrders();
+        const active = current.find((o) => o.status === 'en_route');
+        if (active) {
+          setOrder(active);
+          setDeliveryState('accepted');
+          Animated.spring(slideAnim, { toValue: height - 150, friction: 8, useNativeDriver: true }).start();
+        }
+      } catch (err) {
+        console.error('Erreur commandes en cours:', err);
+      }
+    })();
+  }, [authToken]);
+
+  // 4. ITINÉRAIRE (LocationIQ)
   const fetchRoute = async (destLat, destLon) => {
-    if (!location) return;
+    if (!location || !destLat || !destLon) return;
     try {
       const url = `https://eu1.locationiq.com/v1/directions/driving/${location.longitude},${location.latitude};${destLon},${destLat}?key=${LOCATIONIQ_KEY}&overview=full&geometries=polyline`;
       const res = await axios.get(url);
@@ -98,8 +171,7 @@ export default function App() {
         const points = polyline.decode(res.data.routes[0].geometry);
         const coords = points.map(p => ({ latitude: p[0], longitude: p[1] }));
         setRoute(coords);
-        
-        // Ajuster la vue de la carte
+
         mapRef.current?.fitToCoordinates(coords, {
           edgePadding: { top: 100, right: 100, bottom: 300, left: 100 },
           animated: true,
@@ -114,51 +186,184 @@ export default function App() {
     Animated.spring(slideAnim, { toValue: height - 450, friction: 6, useNativeDriver: true }).start();
   };
 
+  const hideBottomSheet = () => {
+    Animated.spring(slideAnim, { toValue: height, friction: 6, useNativeDriver: true }).start();
+  };
+
+  const handleLogin = async () => {
+    if (!phone.trim() || !password) {
+      setAuthError('Téléphone et mot de passe requis');
+      return;
+    }
+    setAuthError('');
+    setAuthSubmitting(true);
+    try {
+      const data = await authAPI.login(phone.trim(), password);
+      if (!data.token || !data.user) {
+        setAuthError(data.error || 'Identifiants invalides');
+        return;
+      }
+      if (data.user.role !== 'livreur') {
+        setAuthError("Ce compte n'est pas un compte livreur.");
+        return;
+      }
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      setAuthToken(data.token);
+      setAuthUser(data.user);
+    } catch (err) {
+      setAuthError(err.response?.data?.error || 'Erreur de connexion');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(USER_KEY);
+    setAuthToken(null);
+    setAuthUser(null);
+    setIsOnline(false);
+    setDeliveryState('idle');
+    setOrder(null);
+    setRoute([]);
+    setTodayEarnings(0);
+    hideBottomSheet();
+  };
+
   const handleToggleStatus = () => {
     const nextStatus = !isOnline;
     setIsOnline(nextStatus);
     if (nextStatus) {
-      socketRef.current.emit('courier_available');
+      socketRef.current?.emit('courier_available');
     } else {
-      socketRef.current.emit('courier_offline');
+      socketRef.current?.emit('courier_offline');
       setDeliveryState('idle');
       setOrder(null);
       setRoute([]);
+      hideBottomSheet();
     }
   };
 
-  const acceptOrder = () => {
+  const acceptOrder = async () => {
+    if (!order) return;
+    try {
+      await livreurAPI.acceptOrder(order.id);
+    } catch (err) {
+      Alert.alert('Trop tard !', err.response?.data?.error || "Cette commande n'est plus disponible.");
+      setDeliveryState('idle');
+      setOrder(null);
+      hideBottomSheet();
+      return;
+    }
     setDeliveryState('accepted');
-    // Simuler destination Restaurant
-    fetchRoute(14.6937, -17.4441); 
+    fetchRoute(order.restaurant_lat, order.restaurant_lng);
     Animated.spring(slideAnim, { toValue: height - 150, friction: 8, useNativeDriver: true }).start();
   };
 
-  const updateStatus = (nextState) => {
-    setDeliveryState(nextState);
+  const declineOrder = () => {
+    setDeliveryState('idle');
+    setOrder(null);
+    hideBottomSheet();
+  };
+
+  const updateStatus = async (nextState) => {
     if (nextState === 'delivering') {
-      // Simuler destination Client
-      fetchRoute(14.7487, -17.5132); 
+      setDeliveryState(nextState);
+      fetchRoute(order?.latitude, order?.longitude);
+      return;
     }
     if (nextState === 'completed') {
+      try {
+        await livreurAPI.completeOrder(order.id);
+      } catch (err) {
+        Alert.alert('Erreur', err.response?.data?.error || 'Impossible de finaliser la livraison.');
+        return;
+      }
+      setDeliveryState('completed');
       setRoute([]);
-      setTodayEarnings(prev => prev + 2500);
-      setTimeout(() => { setOrder(null); setDeliveryState('idle'); }, 3000);
+      try {
+        const stats = await livreurAPI.getStats();
+        setTodayEarnings(parseFloat(stats?.today?.total_amount) || 0);
+      } catch (err) {
+        console.error('Erreur stats:', err);
+      }
+      setTimeout(() => {
+        setOrder(null);
+        setDeliveryState('idle');
+        hideBottomSheet();
+      }, 3000);
+      return;
+    }
+    setDeliveryState(nextState);
+  };
+
+  const toggleTips = async () => {
+    const next = !showTips;
+    setShowTips(next);
+    if (next) {
+      try {
+        const data = await tipsAPI.getMine();
+        setTips({ tips: data.tips || [], total: parseFloat(data.total) || 0 });
+      } catch (err) {
+        console.error('Erreur pourboires:', err);
+      }
     }
   };
 
+  if (!authChecked) {
+    return <View style={styles.loader}><ActivityIndicator size="large" color="#f97316" /></View>;
+  }
+
+  if (!authToken || !authUser) {
+    return (
+      <View style={styles.loginContainer}>
+        <StatusBar style="dark" />
+        <Text style={styles.loginEmoji}>🛵</Text>
+        <Text style={styles.loginTitle}>NOOR EAT Livreur</Text>
+        <Text style={styles.loginSubtitle}>Connectez-vous pour commencer</Text>
+        <TextInput
+          style={styles.loginInput}
+          placeholder="Téléphone (+221...)"
+          placeholderTextColor="#9ca3af"
+          keyboardType="phone-pad"
+          autoCapitalize="none"
+          value={phone}
+          onChangeText={setPhone}
+        />
+        <TextInput
+          style={styles.loginInput}
+          placeholder="Mot de passe"
+          placeholderTextColor="#9ca3af"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+        {!!authError && <Text style={styles.loginError}>{authError}</Text>}
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={authSubmitting}>
+          {authSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>SE CONNECTER</Text>}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#f97316" /></View>;
+
+  const restoDist = haversineKm(location?.latitude, location?.longitude, order?.restaurant_lat, order?.restaurant_lng);
+  const clientDist = haversineKm(order?.restaurant_lat, order?.restaurant_lng, order?.latitude, order?.longitude);
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      
+
       <MapView
         ref={mapRef}
         style={styles.map}
         initialRegion={{
-          latitude: location?.latitude || 14.6937,
-          longitude: location?.longitude || -17.4441,
+          latitude: location?.latitude || DAKAR_CENTER.latitude,
+          longitude: location?.longitude || DAKAR_CENTER.longitude,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
@@ -171,21 +376,21 @@ export default function App() {
           <Polyline coordinates={route} strokeWidth={6} strokeColor="#f97316" />
         )}
 
-        {deliveryState === 'accepted' || deliveryState === 'pickup' ? (
-           <Marker type="restaurant" coordinate={{ latitude: 14.6937, longitude: -17.4441 }} title="Restaurant" />
-        ) : deliveryState === 'delivering' ? (
-           <Marker type="client" coordinate={{ latitude: 14.7487, longitude: -17.5132 }} title="Client" />
+        {(deliveryState === 'accepted' || deliveryState === 'pickup') && order?.restaurant_lat ? (
+           <Marker type="restaurant" coordinate={{ latitude: order.restaurant_lat, longitude: order.restaurant_lng }} title={order.restaurant_name} />
+        ) : deliveryState === 'delivering' && order?.latitude ? (
+           <Marker type="client" coordinate={{ latitude: order.latitude, longitude: order.longitude }} title={order.client_name} />
         ) : null}
       </MapView>
 
       {/* HEADER CONTROLS */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => setShowTips(!showTips)}><Ionicons name="cash-outline" size={20} color={showTips ? '#f97316' : '#1f2937'} /></TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} onPress={toggleTips}><Ionicons name="cash-outline" size={20} color={showTips ? '#f97316' : '#1f2937'} /></TouchableOpacity>
         <View style={styles.earningsCard}>
           <Text style={styles.earnLabel}>Solde du jour</Text>
           <Text style={styles.earnValue}>{todayEarnings.toLocaleString()} F</Text>
         </View>
-        <TouchableOpacity style={styles.iconBtn}><Ionicons name="notifications" size={20} color="#1f2937" /></TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}><Ionicons name="log-out-outline" size={20} color="#1f2937" /></TouchableOpacity>
       </View>
 
       {/* OFFLINE OVERLAY */}
@@ -218,19 +423,19 @@ export default function App() {
            <View style={styles.timerBadge}><Text style={styles.timerText}>45s</Text></View>
         </View>
         <View style={styles.missionCard}>
-           <Text style={styles.missionPrice}>+2 500 FCFA</Text>
+           <Text style={styles.missionPrice}>+{Number(order?.delivery_fee || 0).toLocaleString()} FCFA</Text>
            <View style={styles.locRow}>
               <View style={styles.dotResto} />
-              <Text style={styles.locText}>Dark Kitchen Plateau (2.5km)</Text>
+              <Text style={styles.locText}>{order?.restaurant_name || 'Restaurant'}{restoDist != null ? ` (${restoDist}km)` : ''}</Text>
            </View>
            <View style={styles.line} />
            <View style={styles.locRow}>
               <View style={styles.dotClient} />
-              <Text style={styles.locText}>Almadies Residence (8km)</Text>
+              <Text style={styles.locText}>{order?.delivery_address || 'Client'}{clientDist != null ? ` (${clientDist}km)` : ''}</Text>
            </View>
         </View>
         <View style={styles.btnRow}>
-           <TouchableOpacity style={styles.decline} onPress={() => setDeliveryState('idle')}>
+           <TouchableOpacity style={styles.decline} onPress={declineOrder}>
               <Text style={styles.declineText}>Ignorer</Text>
            </TouchableOpacity>
            <TouchableOpacity style={styles.accept} onPress={acceptOrder}>
@@ -269,20 +474,22 @@ export default function App() {
           <View style={styles.completedCard}>
             <Text style={styles.completedEmoji}>🎉</Text>
             <Text style={styles.completedTitle}>Livraison terminée !</Text>
-            <Text style={styles.completedAmount}>+2 500 F</Text>
+            <Text style={styles.completedAmount}>+{Number(order?.delivery_fee || 0).toLocaleString()} F</Text>
             {order?.tip_amount > 0 && <Text style={styles.completedTip}>Pourboire: +{order.tip_amount} F</Text>}
           </View>
         </View>
       )}
 
       {/* ACTIVE BAR */}
-      {deliveryState !== 'idle' && deliveryState !== 'incoming' && (
+      {deliveryState !== 'idle' && deliveryState !== 'incoming' && deliveryState !== 'completed' && (
         <View style={styles.activeBar}>
            <View style={{ flex: 1 }}>
               <Text style={styles.activeType}>
-                {deliveryState === 'accepted' ? 'Vers de resto' : deliveryState === 'delivering' ? 'Vers le client' : 'Arrivé !'}
+                {deliveryState === 'accepted' ? 'Vers le resto' : deliveryState === 'delivering' ? 'Vers le client' : 'Arrivé !'}
               </Text>
-              <Text style={styles.activeDest}>Dark Kitchen Ousmane</Text>
+              <Text style={styles.activeDest}>
+                {deliveryState === 'delivering' ? (order?.delivery_address || 'Client') : (order?.restaurant_name || 'Restaurant')}
+              </Text>
            </View>
            <TouchableOpacity style={styles.updateBtn} onPress={() => {
               if (deliveryState === 'accepted') updateStatus('pickup');
@@ -310,7 +517,16 @@ const styles = StyleSheet.create({
   earningsCard: { backgroundColor: '#fff', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, alignItems: 'center', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
   earnLabel: { fontSize: 10, color: '#9ca3af', fontWeight: 'bold' },
   earnValue: { fontSize: 16, fontWeight: '900', color: '#111827' },
-  
+
+  loginContainer: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', padding: 30 },
+  loginEmoji: { fontSize: 60, marginBottom: 10 },
+  loginTitle: { fontSize: 26, fontWeight: '900', color: '#111827' },
+  loginSubtitle: { fontSize: 14, color: '#6b7280', marginTop: 6, marginBottom: 30 },
+  loginInput: { width: '100%', backgroundColor: '#f9fafb', borderRadius: 15, paddingHorizontal: 20, paddingVertical: 14, fontSize: 15, color: '#111827', marginBottom: 15, borderWidth: 1, borderColor: '#e5e7eb' },
+  loginError: { color: '#ef4444', fontWeight: 'bold', fontSize: 13, marginBottom: 10, textAlign: 'center' },
+  loginButton: { width: '100%', backgroundColor: '#f97316', borderRadius: 15, paddingVertical: 16, alignItems: 'center', marginTop: 5 },
+  loginButtonText: { color: '#fff', fontWeight: '900', fontSize: 15 },
+
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center' },
   goBtn: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center', elevation: 10 },
   goText: { color: '#fff', fontWeight: '900', fontSize: 18 },

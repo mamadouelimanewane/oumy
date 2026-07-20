@@ -149,8 +149,8 @@ router.get('/orders/current', async (req, res) => {
 
     const result = await pool.query(
       `SELECT o.*, r.name as restaurant_name, r.address as restaurant_address,
-              r.phone as restaurant_phone, c.name as client_name, 
-              c.phone as client_phone, o.delivery_address
+              r.phone as restaurant_phone, r.latitude as restaurant_lat, r.longitude as restaurant_lng,
+              c.name as client_name, c.phone as client_phone, o.delivery_address
        FROM orders o
        JOIN users r ON o.restaurant_id = r.id
        JOIN users c ON o.client_id = c.id
@@ -228,12 +228,14 @@ router.get('/stats', async (req, res) => {
   try {
     const courierId = req.user.id;
 
-    // Livraisons aujourd'hui
+    // Livraisons aujourd'hui (gains = delivery_fee, ce que le livreur touche
+    // reellement, pas total_amount qui est le montant total de la commande —
+    // meme convention que routes/payouts.js pour le calcul du solde retirable)
     const todayResult = await pool.query(
       `SELECT COUNT(*) as deliveries,
-              COALESCE(SUM(total_amount), 0) as total_amount
-       FROM orders 
-       WHERE courier_id = $1 
+              COALESCE(SUM(delivery_fee), 0) as total_amount
+       FROM orders
+       WHERE courier_id = $1
        AND status = 'livree'
        AND DATE(updated_at) = CURRENT_DATE`,
       [courierId]
@@ -242,9 +244,9 @@ router.get('/stats', async (req, res) => {
     // Livraisons cette semaine
     const weekResult = await pool.query(
       `SELECT COUNT(*) as deliveries,
-              COALESCE(SUM(total_amount), 0) as total_amount
-       FROM orders 
-       WHERE courier_id = $1 
+              COALESCE(SUM(delivery_fee), 0) as total_amount
+       FROM orders
+       WHERE courier_id = $1
        AND status = 'livree'
        AND updated_at >= CURRENT_DATE - INTERVAL '7 days'`,
       [courierId]
@@ -253,8 +255,8 @@ router.get('/stats', async (req, res) => {
     // Total
     const totalResult = await pool.query(
       `SELECT COUNT(*) as deliveries,
-              COALESCE(SUM(total_amount), 0) as total_amount
-       FROM orders 
+              COALESCE(SUM(delivery_fee), 0) as total_amount
+       FROM orders
        WHERE courier_id = $1 AND status = 'livree'`,
       [courierId]
     );

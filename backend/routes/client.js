@@ -7,6 +7,23 @@ const { sendPushToUser } = require('../lib/webpush');
 
 const router = express.Router();
 
+// Frais de livraison (Haversine) : 500 FCFA de base + 200 FCFA/km, 500 FCFA
+// par défaut si les coordonnées du restaurant ou du point de livraison
+// manquent.
+function calculateDeliveryFee(restLat, restLng, lat, lng) {
+  if (!restLat || !restLng || !lat || !lng) return 500;
+  const R = 6371;
+  const dLat = (parseFloat(lat) - parseFloat(restLat)) * Math.PI / 180;
+  const dLng = (parseFloat(lng) - parseFloat(restLng)) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(parseFloat(restLat) * Math.PI / 180) *
+            Math.cos(parseFloat(lat) * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance_km = Math.round(R * c * 10) / 10;
+  return 500 + Math.round(distance_km * 200);
+}
+
 // Récupérer tous les restaurants actifs (paginé, avec note moyenne et horaires)
 router.get('/restaurants', async (req, res) => {
   try {
@@ -171,13 +188,16 @@ router.post('/orders', authenticate, [
 
     // Vérifier que le restaurant existe
     const restaurantCheck = await pool.query(
-      'SELECT id FROM users WHERE id = $1 AND role = $2 AND is_active = true',
+      'SELECT id, latitude, longitude FROM users WHERE id = $1 AND role = $2 AND is_active = true',
       [restaurant_id, 'restaurant']
     );
 
     if (restaurantCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Restaurant non trouvé' });
     }
+
+    const restaurant = restaurantCheck.rows[0];
+    const delivery_fee = calculateDeliveryFee(restaurant.latitude, restaurant.longitude, latitude, longitude);
 
     // Calculer le total et vérifier les articles
     let total_amount = 0;
@@ -248,10 +268,10 @@ router.post('/orders', authenticate, [
       await client.query('BEGIN');
 
       const orderResult = await client.query(
-        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, discount_amount, promo_code)
-         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9)
+        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, discount_amount, promo_code, delivery_fee)
+         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [client_id, restaurant_id, final_amount, payment_method, delivery_address, latitude, longitude, discount_amount, applied_promo]
+        [client_id, restaurant_id, final_amount, payment_method, delivery_address, latitude, longitude, discount_amount, applied_promo, delivery_fee]
       );
 
       // Incrémenter l'utilisation du code promo

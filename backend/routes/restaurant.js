@@ -117,6 +117,23 @@ router.put('/orders/:id/status', [
         status,
         timestamp: new Date().toISOString(),
       });
+
+      // Commande prête : proposer la mission aux livreurs connectés
+      if (status === 'prete') {
+        const detailResult = await pool.query(
+          `SELECT o.*, r.name as restaurant_name, r.address as restaurant_address,
+                  r.latitude as restaurant_lat, r.longitude as restaurant_lng,
+                  c.name as client_name, c.phone as client_phone
+           FROM orders o
+           JOIN users r ON o.restaurant_id = r.id
+           JOIN users c ON o.client_id = c.id
+           WHERE o.id = $1`,
+          [id]
+        );
+        if (detailResult.rows.length > 0) {
+          req.io.to('livreur').emit('new_order_available', detailResult.rows[0]);
+        }
+      }
     }
 
     res.json({
