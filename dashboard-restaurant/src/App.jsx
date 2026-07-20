@@ -276,6 +276,7 @@ function App() {
 
   // Data states
   const [orders, setOrders] = useState([]);
+  const [courierLocs, setCourierLocs] = useState({});
   const [menuItems, setMenuItems] = useState([]);
   const [stats, setStats] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -428,7 +429,7 @@ function App() {
       const interval = setInterval(fetchOrders, 30000);
       return () => clearInterval(interval);
     }
-  }, [user, fetchOrders, fetchMenu, fetchStats, fetchUnreadCount]);
+  }, [user, activeTab, fetchOrders, fetchMenu, fetchStats, fetchUnreadCount]);
 
   const handleLogin = (userData, tokenData) => {
     setUser(userData);
@@ -1045,7 +1046,7 @@ function App() {
                  <div className="bg-slate-900 border-none p-6 rounded-3xl text-white">
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Ticket Moyen</p>
                     <h4 className="text-3xl font-black">
-                       {analytics.revenue_by_day.reduce((acc, d) => acc + d.orders, 0) > 0 
+                       {analytics?.revenue_by_day?.reduce((acc, d) => acc + d.orders, 0) > 0
                          ? formatPrice(analytics.revenue_by_day.reduce((acc, d) => acc + d.revenue, 0) / analytics.revenue_by_day.reduce((acc, d) => acc + d.orders, 0))
                          : '0 FCFA'
                        }

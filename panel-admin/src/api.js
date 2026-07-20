@@ -156,10 +156,10 @@ export const notificationsAPI = {
 
 // Support Tickets API (Admin)
 export const supportAPI = {
-  getAll: async (params = {}) => { const q = new URLSearchParams(params).toString(); const res = await fetchWithAuth(`/support/all?${q}`); return res.json(); },
-  getTicket: async (id) => { const res = await fetchWithAuth(`/support/${id}`); return res.json(); },
-  reply: async (id, message) => { const res = await fetchWithAuth(`/support/${id}/reply`, { method: 'POST', body: JSON.stringify({ message, is_admin: true }) }); return res.json(); },
-  updateStatus: async (id, status) => { const res = await fetchWithAuth(`/support/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }); return res.json(); },
+  getAll: async (params = {}) => { const q = new URLSearchParams(params).toString(); const res = await fetchWithAuth(`/support/tickets?${q}`); return res.json(); },
+  getTicket: async (id) => { const res = await fetchWithAuth(`/support/tickets/${id}`); return res.json(); },
+  reply: async (id, message) => { const res = await fetchWithAuth(`/support/tickets/${id}/messages`, { method: 'POST', body: JSON.stringify({ message }) }); return res.json(); },
+  updateStatus: async (id, status) => { const res = await fetchWithAuth(`/support/tickets/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }); return res.json(); },
 };
 
 // Fraud Detection API
