@@ -1,11 +1,12 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 // Remplace react-native-maps (Google Maps, cle API requise) par une carte
 // Leaflet + tuiles CartoDB (gratuites, sans cle) rendue dans une WebView.
-// Fonctionne a l'identique sur Android/iOS/Web (react-native-webview a un
-// rendu web via <iframe>).
+// react-native-webview ne supporte pas le web (throw a l'execution) : on
+// rend un <iframe> DOM natif sur cette plateforme, avec le meme protocole
+// postMessage que le HTML Leaflet ci-dessous ecoute deja.
 
 const MARKER_STYLES = {
   courier: { color: '#f97316', glyph: '' },
@@ -120,7 +121,12 @@ const MapView = forwardRef(function MapView({ style, initialRegion, children }, 
   }, [children]);
 
   const post = (payload) => {
-    webviewRef.current?.postMessage(JSON.stringify(payload));
+    const msg = JSON.stringify(payload);
+    if (Platform.OS === 'web') {
+      webviewRef.current?.contentWindow?.postMessage(msg, '*');
+    } else {
+      webviewRef.current?.postMessage(msg);
+    }
   };
 
   React.useEffect(() => {
@@ -136,13 +142,22 @@ const MapView = forwardRef(function MapView({ style, initialRegion, children }, 
 
   return (
     <View style={style}>
-      <WebView
-        ref={webviewRef}
-        originWhitelist={['*']}
-        source={{ html }}
-        onLoadEnd={() => setReady(true)}
-        style={{ flex: 1, backgroundColor: 'transparent' }}
-      />
+      {Platform.OS === 'web' ? (
+        <iframe
+          ref={webviewRef}
+          srcDoc={html}
+          onLoad={() => setReady(true)}
+          style={{ flex: 1, border: 'none', width: '100%', height: '100%', backgroundColor: 'transparent' }}
+        />
+      ) : (
+        <WebView
+          ref={webviewRef}
+          originWhitelist={['*']}
+          source={{ html }}
+          onLoadEnd={() => setReady(true)}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+        />
+      )}
     </View>
   );
 });
