@@ -322,7 +322,7 @@ function App() {
     try {
       const { clientAPI } = await import('./api');
       const data = await clientAPI.getOrders();
-      setOrders(data.items || []);
+      setOrders(data.data || []);
     } catch (err) {
       console.error('Fetch orders error:', err);
     }
