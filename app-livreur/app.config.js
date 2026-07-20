@@ -26,11 +26,6 @@ module.exports = {
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
       ],
-      config: {
-        googleMaps: {
-          apiKey: process.env.GOOGLE_MAPS_API_KEY,
-        },
-      },
     },
     web: {
       favicon: "./assets/favicon.png",
@@ -39,7 +34,6 @@ module.exports = {
     extra: {
       eas: { projectId: "78862722-d3f2-4d56-85fa-fd481b5521f0" },
       LOCATIONIQ_API_KEY: process.env.LOCATIONIQ_API_KEY,
-      GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
     },
     plugins: [
       ["expo-location", { locationAlwaysPermission: "Autoriser le suivi en arrière-plan." }],

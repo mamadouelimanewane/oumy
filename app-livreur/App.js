@@ -8,7 +8,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import polyline from '@mapbox/polyline';
 
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from './components/MapView';
+import MapView, { Marker, Polyline } from './components/MapView';
 
 const { width, height } = Dimensions.get('window');
 
@@ -150,7 +150,6 @@ export default function App() {
       
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={{
           latitude: location?.latitude || 14.6937,
@@ -158,14 +157,9 @@ export default function App() {
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
-        customMapStyle={mapStyle}
       >
         {location && (
-          <Marker coordinate={location} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.courierMarker}>
-              <View style={styles.courierCore} />
-            </View>
-          </Marker>
+          <Marker type="courier" coordinate={location} anchor={{ x: 0.5, y: 0.5 }} />
         )}
 
         {route.length > 0 && (
@@ -173,13 +167,9 @@ export default function App() {
         )}
 
         {deliveryState === 'accepted' || deliveryState === 'pickup' ? (
-           <Marker coordinate={{ latitude: 14.6937, longitude: -17.4441 }} title="Restaurant">
-              <View style={styles.destMarker}><Ionicons name="storefront" size={20} color="white" /></View>
-           </Marker>
+           <Marker type="restaurant" coordinate={{ latitude: 14.6937, longitude: -17.4441 }} title="Restaurant" />
         ) : deliveryState === 'delivering' ? (
-           <Marker coordinate={{ latitude: 14.7487, longitude: -17.5132 }} title="Client">
-              <View style={[styles.destMarker, { backgroundColor: '#10b981' }]}><Ionicons name="location" size={20} color="white" /></View>
-           </Marker>
+           <Marker type="client" coordinate={{ latitude: 14.7487, longitude: -17.5132 }} title="Client" />
         ) : null}
       </MapView>
 
@@ -303,11 +293,6 @@ export default function App() {
     </View>
   );
 }
-
-const mapStyle = [
-  { "featureType": "poi", "stylers": [{ "visibility": "off" }] },
-  { "featureType": "transit", "stylers": [{ "visibility": "off" }] }
-];
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
