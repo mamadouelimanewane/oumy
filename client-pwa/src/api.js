@@ -349,10 +349,10 @@ export const miniGameAPI = {
 
 // Analytics Restaurant API
 export const analyticsRestaurantAPI = {
-  getOverview: () => fetchWithAuth('/analytics/restaurant/overview'),
-  getPopularItems: () => fetchWithAuth('/analytics/restaurant/popular-items'),
-  getPeakHours: () => fetchWithAuth('/analytics/restaurant/peak-hours'),
-  getRevenueChart: () => fetchWithAuth('/analytics/restaurant/revenue-chart'),
+  getOverview: () => fetchWithAuth('/analytics-restaurant/overview'),
+  getPopularItems: () => fetchWithAuth('/analytics-restaurant/popular-items'),
+  getPeakHours: () => fetchWithAuth('/analytics-restaurant/peak-hours'),
+  getRevenueChart: () => fetchWithAuth('/analytics-restaurant/revenue-chart'),
 };
 
 // Price Alert API
