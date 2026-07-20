@@ -25,7 +25,8 @@
     "jsonwebtoken": "^9.0.3",
     "natural": "^8.1.1",
     "pg": "^8.13.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "jest": "^29.7.0",

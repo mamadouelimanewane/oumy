@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 const { paginate, paginatedResponse } = require('../middleware/pagination');
+const { sendPushToUser } = require('../lib/webpush');
 
 const router = express.Router();
 
@@ -288,6 +289,12 @@ router.post('/orders', authenticate, [
           total: total_amount,
         });
       }
+
+      // Notification push reelle (utile si le restaurant n'a pas l'app ouverte)
+      sendPushToUser(restaurant_id, {
+        title: 'Nouvelle commande !',
+        body: `Commande #${order.id} - ${total_amount} FCFA`,
+      });
 
       res.status(201).json({
         message: 'Commande créée avec succès',

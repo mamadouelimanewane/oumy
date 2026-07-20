@@ -1774,7 +1774,13 @@ function App() {
             {/* Push permission */}
             {'Notification' in window && Notification.permission !== 'granted' && (
               <button
-                onClick={() => Notification.requestPermission().then(p => { if (p === 'granted') { new Notification('NOOR EAT', { body: 'Notifications activées ! 🎉' }); } })}
+                onClick={async () => {
+                  try {
+                    const { enableBrowserPush } = await import('./api');
+                    await enableBrowserPush();
+                    alert('Notifications activées ! 🎉');
+                  } catch (e) { alert(e.message); }
+                }}
                 className="w-full mb-6 py-4 bg-gradient-to-r from-primary to-orange-600 text-white font-bold rounded-2xl text-sm shadow-lg shadow-primary/30 hover:shadow-xl transition-all"
               >
                 {lang === 'fr' ? '🔔 Activer les notifications push' : '🔔 Dëggal notifications push'}

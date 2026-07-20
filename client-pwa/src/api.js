@@ -378,11 +378,40 @@ export const photoReviewAPI = {
 
 // Push Notifications API
 export const pushNotificationsAPI = {
+  getVapidKey: () => fetchWithAuth('/notifications-push/vapid-public-key'),
   subscribe: (subscription) => fetchWithAuth('/notifications-push/subscribe', { method: 'POST', body: JSON.stringify({ subscription }) }),
   getAll: () => fetchWithAuth('/notifications-push'),
   markRead: (id) => fetchWithAuth(`/notifications-push/${id}/read`, { method: 'PUT' }),
   markAllRead: () => fetchWithAuth('/notifications-push/read-all', { method: 'PUT' }),
 };
+
+// Active les vraies notifications push navigateur : demande la permission,
+// s'abonne via le Service Worker deja enregistre (voir index.html/sw.js) avec
+// la cle publique VAPID du serveur, puis enregistre l'abonnement cote backend.
+export async function enableBrowserPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error("Les notifications push ne sont pas supportées par ce navigateur");
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    throw new Error('Permission refusée');
+  }
+  const { publicKey } = await pushNotificationsAPI.getVapidKey();
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+  await pushNotificationsAPI.subscribe(subscription.toJSON());
+  return subscription;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
 
 // Voice Order API
 export const voiceOrderAPI = {

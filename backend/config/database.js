@@ -428,6 +428,13 @@ if (USE_POSTGRES) {
       'ALTER TABLE menu_items ADD COLUMN calories INTEGER',
       'ALTER TABLE menu_items ADD COLUMN allergens TEXT',
       'ALTER TABLE menu_items ADD COLUMN stock_quantity INTEGER DEFAULT -1',
+      'ALTER TABLE chat_messages ADD COLUMN sender_role TEXT',
+      'ALTER TABLE referrals ADD COLUMN bonus_amount INTEGER DEFAULT 500',
+      'ALTER TABLE referrals ADD COLUMN status TEXT DEFAULT \'pending\'',
+      'ALTER TABLE users ADD COLUMN push_subscription TEXT',
+      'ALTER TABLE users ADD COLUMN otp_code TEXT',
+      'ALTER TABLE users ADD COLUMN otp_expires DATETIME',
+      'ALTER TABLE users ADD COLUMN two_fa_verified INTEGER DEFAULT 0',
     ];
     for (const stmt of alterStatements) {
       try { db.exec(stmt); } catch(e) { /* column may already exist */ }
