@@ -20,7 +20,6 @@ function App() {
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoApplied, setPromoApplied] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('wave');
-  const [socket, setSocket] = useState(null);
   const [orders, setOrders] = useState([]);
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [courierLoc, setCourierLoc] = useState(null);
@@ -297,26 +296,36 @@ function App() {
     }
   }, [userLocation]);
 
-  // SOCKET.IO
+  // SUIVI COMMANDE — sondage REST (remplace Socket.IO, indisponible sur ce
+  // deploiement serverless Vercel : le backend n'expose que l'app Express a
+  // la fonction, jamais le http.Server auquel Socket.IO attache ses upgrades).
   useEffect(() => {
-    if (!token) return;
-    import('./api').then(({ createSocketConnection }) => {
-       createSocketConnection(token).then(s => {
-          setSocket(s);
-          s.on('order_status_changed', (data) => {
-             setOrderStatus('status_update');
-             setTimeout(() => setOrderStatus(null), 3000);
-             fetchOrders(); // Rafraîchir
-          });
-          s.on('courier_location_update', (data) => {
-            if (trackingOrder && data.orderId === trackingOrder.id) {
-              setCourierLoc({ lat: data.latitude, lng: data.longitude });
-            }
-          });
-       });
-    });
-    return () => { if (socket) socket.disconnect(); };
-  }, [token, trackingOrder]);
+    if (!token || !trackingOrder) return;
+    let cancelled = false;
+    let prevStatus = trackingOrder.status;
+    const poll = async () => {
+      try {
+        const { clientAPI } = await import('./api');
+        const data = await clientAPI.trackOrder(trackingOrder.id);
+        if (cancelled || !data || data.error) return;
+        if (data.courier_lat && data.courier_lng) {
+          setCourierLoc({ lat: data.courier_lat, lng: data.courier_lng });
+        }
+        if (data.status !== prevStatus) {
+          prevStatus = data.status;
+          setOrderStatus('status_update');
+          setTimeout(() => setOrderStatus(null), 3000);
+          fetchOrders();
+        }
+        setTrackingOrder((prev) => (prev ? { ...prev, ...data } : prev));
+      } catch (err) {
+        console.error('Erreur suivi commande:', err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [token, trackingOrder?.id]);
 
   const fetchOrders = async () => {
     try {

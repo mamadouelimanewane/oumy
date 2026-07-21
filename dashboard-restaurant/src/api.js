@@ -1,5 +1,4 @@
 const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
-export const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
 
 // Helper pour les requêtes authentifiées
 const fetchWithAuth = async (url, options = {}) => {
@@ -46,6 +45,13 @@ export const authAPI = {
 export const restaurantAPI = {
   getActiveOrders: async () => {
     const res = await fetchWithAuth('/restaurant/orders/active');
+    return res.json();
+  },
+
+  // Route partagee avec client-pwa : autorisee pour client_id, restaurant_id
+  // OU courier_id de la commande.
+  trackOrder: async (orderId) => {
+    const res = await fetchWithAuth(`/client/orders/${orderId}/track`);
     return res.json();
   },
 
@@ -229,14 +235,4 @@ export const analyticsAPI = {
   getPopularItems: async () => { const res = await fetchWithAuth('/analytics-restaurant/popular-items'); return res.json(); },
   getPeakHours: async () => { const res = await fetchWithAuth('/analytics-restaurant/peak-hours'); return res.json(); },
   getRevenueChart: async () => { const res = await fetchWithAuth('/analytics-restaurant/revenue-chart'); return res.json(); },
-};
-
-// Socket.IO connection
-export const createSocketConnection = async (token) => {
-  const { io } = await import('socket.io-client');
-  // Utilisation de SOCKET_URL exporté en haut du fichier
-  return io(SOCKET_URL, {
-    auth: { token },
-    transports: ['websocket', 'polling'],
-  });
 };

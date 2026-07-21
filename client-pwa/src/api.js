@@ -1,5 +1,4 @@
 const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
-export const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
 
 // Helper pour les requêtes API
 const fetchWithAuth = async (endpoint, options = {}) => {
@@ -422,17 +421,6 @@ export const voiceOrderAPI = {
 export const twofaAPI = {
   sendOTP: () => fetchWithAuth('/2fa/send-otp', { method: 'POST' }),
   verifyOTP: (otp) => fetchWithAuth('/2fa/verify-otp', { method: 'POST', body: JSON.stringify({ otp }) }),
-};
-
-// Socket.IO connection
-export const createSocketConnection = async (token) => {
-  const { io } = await import('socket.io-client');
-  // Utilise l'export SOCKET_URL
-  const socket = io(SOCKET_URL, {
-    auth: { token },
-    transports: ['websocket', 'polling'],
-  });
-  return socket;
 };
 
 export default fetchWithAuth;

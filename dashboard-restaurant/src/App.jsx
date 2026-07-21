@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BellRing,
   Utensils,
@@ -35,7 +35,7 @@ import {
   ChevronLeft,
   BarChart3,
 } from 'lucide-react';
-import { authAPI, restaurantAPI, notificationsAPI, createSocketConnection, promotionsAPI, payoutAPI, chatAPI, stockAPI, customizationAPI, storiesAPI, qrCodeAPI, cateringAPI, analyticsAPI } from './api';
+import { authAPI, restaurantAPI, notificationsAPI, promotionsAPI, payoutAPI, chatAPI, stockAPI, customizationAPI, storiesAPI, qrCodeAPI, cateringAPI, analyticsAPI } from './api';
 import { ShieldAlert } from 'lucide-react';
 
 // --- Fleet Map Component (Leaflet/OpenStreetMap - no API key needed) ---
@@ -271,7 +271,7 @@ function App() {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('commandes');
-  const [socket, setSocket] = useState(null);
+  const seenOrderIdsRef = useRef(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Data states
@@ -315,46 +315,60 @@ function App() {
     setLoading(false);
   }, []);
 
-  // Socket.IO connexion
+  // SONDAGE COMMANDES ACTIVES — remplace Socket.IO, indisponible sur ce
+  // deploiement serverless Vercel (le backend n'expose que l'app Express a
+  // la fonction, jamais le http.Server auquel Socket.IO attache ses upgrades).
+  // Un seul sondage couvre new_order_notification / order_status_changed /
+  // order_cancelled (tous se resument a rafraichir la liste des commandes
+  // actives) + la position des livreurs en cours de livraison.
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const data = await restaurantAPI.getActiveOrders();
+        if (cancelled || !Array.isArray(data)) return;
 
-    let socketInstance = null;
-    createSocketConnection(token).then(s => {
-      socketInstance = s;
-      setSocket(s);
+        const currentIds = new Set(data.map((o) => o.id));
+        if (seenOrderIdsRef.current) {
+          const freshOrder = data.find((o) => !seenOrderIdsRef.current.has(o.id) && o.status === 'nouvelle');
+          if (freshOrder) {
+            setNewOrderAlert({ orderId: freshOrder.id, total: freshOrder.total_amount, message: 'Nouvelle commande reçue !' });
+            fetchUnreadCount();
+          }
+        }
+        seenOrderIdsRef.current = currentIds;
+        setOrders(data);
 
-      s.on('new_order_notification', (data) => {
-        setNewOrderAlert(data);
-        fetchOrders();
-        fetchUnreadCount();
-      });
-
-      s.on('order_status_changed', () => {
-        fetchOrders();
-      });
-
-      s.on('order_cancelled', () => {
-        fetchOrders();
-        fetchUnreadCount();
-      });
-
-      s.on('rating_received', (data) => {
-        fetchStats();
-      });
-
-      s.on('courier_location_update', (data) => {
-        setCourierLocs(prev => ({
-          ...prev,
-          [data.courierId]: { lat: data.latitude, lng: data.longitude, orderId: data.orderId }
-        }));
-      });
-    });
-
-    return () => {
-      if (socketInstance) socketInstance.disconnect();
+        const inTransit = data.filter((o) => o.status === 'en_route' && o.courier_id);
+        if (inTransit.length > 0) {
+          const results = await Promise.all(inTransit.map((o) => restaurantAPI.trackOrder(o.id).catch(() => null)));
+          if (cancelled) return;
+          setCourierLocs((prev) => {
+            const next = { ...prev };
+            results.forEach((r, i) => {
+              if (r && r.courier_lat && r.courier_lng) {
+                next[inTransit[i].courier_id] = { lat: r.courier_lat, lng: r.courier_lng, orderId: inTransit[i].id };
+              }
+            });
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error('Erreur sondage commandes:', err);
+      }
     };
-  }, [token]);
+    poll();
+    const interval = setInterval(poll, 6000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [token, fetchUnreadCount]);
+
+  // SONDAGE STATS — remplace rating_received (frequence plus basse, non critique)
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => { fetchStats(); }, 20000);
+    return () => clearInterval(interval);
+  }, [token, fetchStats]);
 
   // Charger les données
   const fetchOrders = useCallback(async () => {
@@ -455,7 +469,6 @@ function App() {
     localStorage.removeItem('restaurant_user');
     setUser(null);
     setToken(null);
-    if (socket) socket.disconnect();
   };
 
   // Actions sur les commandes

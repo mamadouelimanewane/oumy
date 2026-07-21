@@ -1,5 +1,4 @@
 const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
-export const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
 
 const fetchWithAuth = async (url, options = {}) => {
   const token = localStorage.getItem('admin_token');
@@ -191,11 +190,3 @@ export const gamificationAPI = {
   getChallenges: async () => { const res = await fetchWithAuth('/gamification/challenges'); return res.json(); },
 };
 
-export const createSocketConnection = async (token) => {
-  const { io } = await import('socket.io-client');
-  // Utilise l'export SOCKET_URL
-  return io(SOCKET_URL, {
-    auth: { token },
-    transports: ['websocket', 'polling'],
-  });
-};

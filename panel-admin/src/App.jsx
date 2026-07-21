@@ -27,7 +27,7 @@ import {
   AlertTriangle,
   Plus
 } from 'lucide-react';
-import { authAPI, adminAPI, notificationsAPI, createSocketConnection, payoutsAPI, depositsAPI, promotionsAPI, supportAPI, fraudAPI, deliveryZoneAPI, gamificationAPI, subscriptionAPI } from './api';
+import { authAPI, adminAPI, notificationsAPI, payoutsAPI, depositsAPI, promotionsAPI, supportAPI, fraudAPI, deliveryZoneAPI, gamificationAPI, subscriptionAPI } from './api';
 
 // --- Fleet Map Component (Leaflet/OpenStreetMap - no API key needed) ---
 function FleetMap({ couriersLocs, history = [], selectedCourierId = null, hotspots = [] }) {
@@ -279,22 +279,39 @@ function App() {
     setLoading(false);
   }, []);
 
-  // Socket.IO
+  // SONDAGE — remplace Socket.IO, indisponible sur ce deploiement serverless
+  // Vercel (le backend n'expose que l'app Express a la fonction, jamais le
+  // http.Server auquel Socket.IO attache ses upgrades). Un seul sondage
+  // couvre courier_status_changed + order_status_changed (rafraichissement
+  // dashboard/commandes) et fleet_location_update (positions des livreurs,
+  // deja incluses dans la reponse de /admin/couriers).
   useEffect(() => {
     if (!token) return;
-    let socketInstance = null;
-    createSocketConnection(token).then(s => {
-      socketInstance = s;
-      s.on('courier_status_changed', () => fetchDashboard());
-      s.on('order_status_changed', () => { fetchDashboard(); fetchOrders(); });
-      s.on('fleet_location_update', (data) => {
-        setFleetLocs(prev => ({
-          ...prev,
-          [data.courierId]: { lat: data.latitude, lng: data.longitude, timestamp: data.timestamp }
-        }));
-      });
-    });
-    return () => { if (socketInstance) socketInstance.disconnect(); };
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const [dashData, couriersData] = await Promise.all([
+          adminAPI.getDashboard(),
+          adminAPI.getCouriers(1),
+        ]);
+        if (cancelled) return;
+        if (dashData) setDashboard(dashData);
+        fetchOrders();
+        const couriers = couriersData?.data || [];
+        const next = {};
+        couriers.forEach((c) => {
+          if (c.latitude && c.longitude) {
+            next[c.id] = { lat: c.latitude, lng: c.longitude, timestamp: c.last_location };
+          }
+        });
+        setFleetLocs(next);
+      } catch (err) {
+        console.error('Erreur sondage admin:', err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 8000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [token]);
 
   const fetchDashboard = useCallback(async () => {
