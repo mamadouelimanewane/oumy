@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, Dimensions, Animated, Alert, ActivityIndicator, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
-import { io } from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import Constants from 'expo-constants';
@@ -10,7 +9,16 @@ import polyline from '@mapbox/polyline';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import MapView, { Marker, Polyline } from './components/MapView';
-import { SOCKET_URL, TOKEN_KEY, USER_KEY, authAPI, livreurAPI, tipsAPI } from './api';
+import { TOKEN_KEY, USER_KEY, authAPI, livreurAPI, tipsAPI } from './api';
+
+// Le backend est deploye en fonctions serverless Vercel (voir api/index.js :
+// seul `app`, pas le `http.Server`, y est exporte, et server.listen() est
+// desactive quand process.env.VERCEL est present). Socket.IO a besoin d'une
+// connexion persistante (WebSocket ou polling avec affinite de session) que
+// ce type de deploiement ne peut pas fournir — verifie en confirmant que la
+// negociation Socket.IO echoue en prod, meme sur le chemin /socket.io/.
+// Le "temps reel" est donc remplace ici par un polling REST classique.
+const AVAILABLE_ORDERS_POLL_MS = 6000;
 
 const { width, height } = Dimensions.get('window');
 
@@ -48,17 +56,13 @@ export default function App() {
   const [todayEarnings, setTodayEarnings] = useState(0);
 
   const mapRef = useRef(null);
-  const socketRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(height)).current;
+  // Offres refusees ("Ignorer") a ne pas re-proposer au prochain sondage tant
+  // qu'elles restent disponibles.
+  const declinedIdsRef = useRef(new Set());
 
-  // Refs miroir pour eviter de recreer le socket a chaque changement d'etat
-  // (le handler 'new_order_available' doit toujours lire l'etat le plus recent).
   const isOnlineRef = useRef(isOnline);
-  const deliveryStateRef = useRef(deliveryState);
-  const orderRef = useRef(order);
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
-  useEffect(() => { deliveryStateRef.current = deliveryState; }, [deliveryState]);
-  useEffect(() => { orderRef.current = order; }, [order]);
 
   // 0. RESTAURATION DE SESSION
   useEffect(() => {
@@ -97,12 +101,8 @@ export default function App() {
           { accuracy: Location.Accuracy.High, distanceInterval: 10 },
           (newLoc) => {
             setLocation(newLoc.coords);
-            if (isOnlineRef.current && socketRef.current) {
-              socketRef.current.emit('courier_location', {
-                latitude: newLoc.coords.latitude,
-                longitude: newLoc.coords.longitude,
-                orderId: orderRef.current?.id,
-              });
+            if (isOnlineRef.current) {
+              livreurAPI.updateLocation(newLoc.coords.latitude, newLoc.coords.longitude).catch(() => {});
             }
           }
         );
@@ -114,28 +114,32 @@ export default function App() {
     })();
   }, []);
 
-  // 2. SOCKET.IO — connexion reelle une fois authentifie (JWT, plus de mock)
+  // 2. SONDAGE DES MISSIONS DISPONIBLES (remplace le push Socket.IO, indisponible sur ce deploiement)
   useEffect(() => {
-    if (!authToken) return;
+    if (!authToken || !isOnline || deliveryState !== 'idle') return;
 
-    socketRef.current = io(SOCKET_URL, {
-      auth: { token: authToken },
-      transports: ['websocket'],
-    });
-
-    socketRef.current.on('new_order_available', (newOrder) => {
-      if (isOnlineRef.current && deliveryStateRef.current === 'idle') {
-        setOrder(newOrder);
-        setDeliveryState('incoming');
-        showBottomSheet();
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const available = await livreurAPI.getAvailableOrders();
+        if (cancelled) return;
+        const availableIds = new Set(available.map((o) => o.id));
+        declinedIdsRef.current.forEach((id) => { if (!availableIds.has(id)) declinedIdsRef.current.delete(id); });
+        const next = available.find((o) => !declinedIdsRef.current.has(o.id));
+        if (next) {
+          setOrder(next);
+          setDeliveryState('incoming');
+          showBottomSheet();
+        }
+      } catch (err) {
+        console.error('Erreur recherche missions:', err);
       }
-    });
-
-    return () => {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
     };
-  }, [authToken]);
+
+    poll();
+    const interval = setInterval(poll, AVAILABLE_ORDERS_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [authToken, isOnline, deliveryState]);
 
   // 3. DONNÉES INITIALES : gains du jour + livraison deja en cours (reprise apres fermeture app)
   useEffect(() => {
@@ -219,8 +223,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    socketRef.current?.disconnect();
-    socketRef.current = null;
     await AsyncStorage.removeItem(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
     setAuthToken(null);
@@ -236,10 +238,7 @@ export default function App() {
   const handleToggleStatus = () => {
     const nextStatus = !isOnline;
     setIsOnline(nextStatus);
-    if (nextStatus) {
-      socketRef.current?.emit('courier_available');
-    } else {
-      socketRef.current?.emit('courier_offline');
+    if (!nextStatus) {
       setDeliveryState('idle');
       setOrder(null);
       setRoute([]);
@@ -264,6 +263,7 @@ export default function App() {
   };
 
   const declineOrder = () => {
+    if (order) declinedIdsRef.current.add(order.id);
     setDeliveryState('idle');
     setOrder(null);
     hideBottomSheet();

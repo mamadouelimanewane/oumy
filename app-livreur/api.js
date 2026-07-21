@@ -29,9 +29,11 @@ export const authAPI = {
 
 export const livreurAPI = {
   getCurrentOrders: async () => (await client.get('/livreur/orders/current')).data,
+  getAvailableOrders: async () => (await client.get('/livreur/orders/available')).data,
   getStats: async () => (await client.get('/livreur/stats')).data,
   acceptOrder: async (id) => (await client.post(`/livreur/orders/${id}/accept`)).data,
   completeOrder: async (id) => (await client.post(`/livreur/orders/${id}/complete`)).data,
+  updateLocation: async (latitude, longitude) => (await client.post('/livreur/location', { latitude, longitude })).data,
 };
 
 export const tipsAPI = {
