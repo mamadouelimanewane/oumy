@@ -371,8 +371,12 @@ app.set('io', io);
 
 const startServer = async () => {
   try {
+    // initDatabase() cree/migre le schema (CREATE TABLE IF NOT EXISTS +
+    // ALTER TABLE idempotents) et doit tourner aussi bien en local qu'en
+    // serverless Vercel — seul server.listen() (incompatible avec le modele
+    // serverless) est reserve au mode local.
+    await initDatabase();
     if (!process.env.VERCEL) {
-      await initDatabase();
       server.listen(PORT, () => {
         console.log(`🚀 API NOOR EAT lancée sur http://localhost:${PORT}`);
         console.log(`📡 Socket.IO actif pour temps réel`);
@@ -382,7 +386,7 @@ const startServer = async () => {
     }
   } catch (err) {
     console.error('❌ Erreur démarrage serveur:', err);
-    process.exit(1);
+    if (!process.env.VERCEL) process.exit(1);
   }
 };
 

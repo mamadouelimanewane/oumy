@@ -450,7 +450,7 @@ async function _createPostgresTables(client) {
   await client.query(`CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_id INTEGER NOT NULL REFERENCES users(id), restaurant_id INTEGER NOT NULL REFERENCES users(id), courier_id INTEGER REFERENCES users(id), status VARCHAR(20) NOT NULL CHECK(status IN ('nouvelle','preparation','prete','en_route','livree','annulee')), total_amount DECIMAL(10,2) NOT NULL, delivery_fee DECIMAL(10,2) DEFAULT 0, discount_amount DECIMAL(10,2) DEFAULT 0, promo_code VARCHAR(50), estimated_delivery_time INTEGER, payment_method VARCHAR(20) CHECK(payment_method IN ('wave','orange_money','cash')), payment_status VARCHAR(20) CHECK(payment_status IN ('en_attente','paye','echoue')), delivery_address TEXT NOT NULL, latitude DECIMAL(10,8), longitude DECIMAL(11,8), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await client.query(`CREATE TABLE IF NOT EXISTS order_items (id SERIAL PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE, menu_item_id INTEGER NOT NULL REFERENCES menu_items(id), quantity INTEGER NOT NULL, price_at_time DECIMAL(10,2) NOT NULL)`);
   await client.query(`CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, type VARCHAR(50) NOT NULL, title VARCHAR(200) NOT NULL, message TEXT NOT NULL, is_read BOOLEAN DEFAULT false, data JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
-  await client.query(`CREATE TABLE IF NOT EXISTS courier_locations (id SERIAL PRIMARY KEY, courier_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, latitude DECIMAL(10,8) NOT NULL, longitude DECIMAL(11,8) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS courier_locations (id SERIAL PRIMARY KEY, courier_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, latitude DECIMAL(10,8) NOT NULL, longitude DECIMAL(11,8) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await client.query(`CREATE TABLE IF NOT EXISTS ratings (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), restaurant_id INTEGER NOT NULL REFERENCES users(id), order_id INTEGER NOT NULL REFERENCES orders(id), rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5), comment TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, order_id))`);
   await client.query(`CREATE TABLE IF NOT EXISTS favorites (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), restaurant_id INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, restaurant_id))`);
   await client.query(`CREATE TABLE IF NOT EXISTS restaurant_hours (id SERIAL PRIMARY KEY, restaurant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, day_of_week INTEGER NOT NULL CHECK(day_of_week >= 0 AND day_of_week <= 6), open_time TIME NOT NULL, close_time TIME NOT NULL, UNIQUE(restaurant_id, day_of_week))`);
@@ -526,6 +526,17 @@ async function _createPostgresTables(client) {
   for (const stmt of alterCols) {
     try { await client.query(stmt); } catch(e) { /* column may already exist */ }
   }
+
+  // courier_locations.courier_id n'avait aucune contrainte UNIQUE alors que
+  // routes/livreur.js et server.js font tous les deux un upsert
+  // "ON CONFLICT (courier_id)" -> echouait avec 500 a chaque mise a jour de
+  // position en prod. Deduplique d'abord (garde la ligne la plus recente par
+  // courier) avant d'ajouter la contrainte, au cas ou des doublons existent.
+  try {
+    await client.query(`DELETE FROM courier_locations a USING courier_locations b
+      WHERE a.id < b.id AND a.courier_id = b.courier_id`);
+    await client.query(`ALTER TABLE courier_locations ADD CONSTRAINT courier_locations_courier_id_key UNIQUE (courier_id)`);
+  } catch (e) { /* contrainte deja presente */ }
 }
 
 module.exports = { pool, initDatabase };
