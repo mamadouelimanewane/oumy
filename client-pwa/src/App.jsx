@@ -2200,10 +2200,13 @@ function LiveTrackingMap({ courierLat, courierLng, clientLat, clientLng, restaur
     };
   }, []);
 
-  // Update courier marker position in real-time
+  // Update courier marker position in real-time, and keep it in view as it moves
   useEffect(() => {
     if (markersRef.current.courier && window.L) {
       markersRef.current.courier.setLatLng([courierLat, courierLng]);
+      if (mapInstanceRef.current && !mapInstanceRef.current.getBounds().contains([courierLat, courierLng])) {
+        mapInstanceRef.current.panTo([courierLat, courierLng]);
+      }
     }
   }, [courierLat, courierLng]);
 

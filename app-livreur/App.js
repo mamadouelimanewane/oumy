@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Dimensions, Animated, Alert, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, ScrollView, Dimensions, Animated, Alert, ActivityIndicator, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +34,15 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10;
 }
 
+// Le backend ne suit qu'un statut global ('en_route') par commande — le
+// sous-etat "recupere au resto vs pas encore" (pickedUp) est purement local
+// a l'app, propre a chaque commande active independamment des autres.
+function nextStop(order) {
+  return order.pickedUp
+    ? { lat: order.latitude, lng: order.longitude, label: order.delivery_address || 'Client', type: 'client' }
+    : { lat: order.restaurant_lat, lng: order.restaurant_lng, label: order.restaurant_name || 'Restaurant', type: 'restaurant' };
+}
+
 export default function App() {
   // AUTH
   const [authChecked, setAuthChecked] = useState(false);
@@ -46,10 +55,14 @@ export default function App() {
 
   // APP STATE
   const [isOnline, setIsOnline] = useState(false);
-  const [deliveryState, setDeliveryState] = useState('idle'); // 'idle', 'incoming', 'accepted', 'pickup', 'delivering', 'completed'
   const [location, setLocation] = useState(null);
   const [route, setRoute] = useState([]);
-  const [order, setOrder] = useState(null);
+  // Livraisons multiples : le livreur peut accepter une nouvelle offre sans
+  // avoir termine la precedente, et choisit lui-meme l'ordre des arrets.
+  const [activeOrders, setActiveOrders] = useState([]); // [{...order, pickedUp}]
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [incomingOffer, setIncomingOffer] = useState(null);
+  const [justCompleted, setJustCompleted] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tips, setTips] = useState({ tips: [], total: 0 });
   const [showTips, setShowTips] = useState(false);
@@ -114,9 +127,13 @@ export default function App() {
     })();
   }, []);
 
-  // 2. SONDAGE DES MISSIONS DISPONIBLES (remplace le push Socket.IO, indisponible sur ce deploiement)
+  // 2. SONDAGE DES MISSIONS DISPONIBLES (remplace le push Socket.IO,
+  // indisponible sur ce deploiement). Continue meme si le livreur a deja des
+  // livraisons actives, pour lui permettre d'en enchainer plusieurs sur le
+  // meme trajet — une seule offre a la fois est proposee (pas d'empilement
+  // de sheets tant que la precedente n'a pas ete traitee).
   useEffect(() => {
-    if (!authToken || !isOnline || deliveryState !== 'idle') return;
+    if (!authToken || !isOnline || incomingOffer) return;
 
     let cancelled = false;
     const poll = async () => {
@@ -127,8 +144,7 @@ export default function App() {
         declinedIdsRef.current.forEach((id) => { if (!availableIds.has(id)) declinedIdsRef.current.delete(id); });
         const next = available.find((o) => !declinedIdsRef.current.has(o.id));
         if (next) {
-          setOrder(next);
-          setDeliveryState('incoming');
+          setIncomingOffer(next);
           showBottomSheet();
         }
       } catch (err) {
@@ -139,9 +155,9 @@ export default function App() {
     poll();
     const interval = setInterval(poll, AVAILABLE_ORDERS_POLL_MS);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [authToken, isOnline, deliveryState]);
+  }, [authToken, isOnline, incomingOffer]);
 
-  // 3. DONNÉES INITIALES : gains du jour + livraison deja en cours (reprise apres fermeture app)
+  // 3. DONNÉES INITIALES : gains du jour + livraisons deja en cours (reprise apres fermeture app)
   useEffect(() => {
     if (!authToken) return;
     (async () => {
@@ -153,11 +169,10 @@ export default function App() {
       }
       try {
         const current = await livreurAPI.getCurrentOrders();
-        const active = current.find((o) => o.status === 'en_route');
-        if (active) {
-          setOrder(active);
-          setDeliveryState('accepted');
-          Animated.spring(slideAnim, { toValue: height - 150, friction: 8, useNativeDriver: true }).start();
+        const active = current.filter((o) => o.status === 'en_route').map((o) => ({ ...o, pickedUp: false }));
+        if (active.length > 0) {
+          setActiveOrders(active);
+          selectOrder(active[0]);
         }
       } catch (err) {
         console.error('Erreur commandes en cours:', err);
@@ -165,7 +180,7 @@ export default function App() {
     })();
   }, [authToken]);
 
-  // 4. ITINÉRAIRE (LocationIQ)
+  // 4. ITINÉRAIRE (LocationIQ) — trace toujours l'itineraire de la commande selectionnee
   const fetchRoute = async (destLat, destLon) => {
     if (!location || !destLat || !destLon) return;
     try {
@@ -184,6 +199,13 @@ export default function App() {
     } catch (err) {
       console.error("Erreur Route:", err);
     }
+  };
+
+  const selectOrder = (orderObj) => {
+    setSelectedOrderId(orderObj.id);
+    const stop = nextStop(orderObj);
+    if (stop.lat && stop.lng) fetchRoute(stop.lat, stop.lng);
+    else setRoute([]);
   };
 
   const showBottomSheet = () => {
@@ -228,8 +250,10 @@ export default function App() {
     setAuthToken(null);
     setAuthUser(null);
     setIsOnline(false);
-    setDeliveryState('idle');
-    setOrder(null);
+    setActiveOrders([]);
+    setSelectedOrderId(null);
+    setIncomingOffer(null);
+    setJustCompleted(null);
     setRoute([]);
     setTodayEarnings(0);
     hideBottomSheet();
@@ -239,66 +263,64 @@ export default function App() {
     const nextStatus = !isOnline;
     setIsOnline(nextStatus);
     livreurAPI.setStatus(nextStatus).catch((err) => console.error('Erreur statut en ligne:', err));
-    if (!nextStatus) {
-      setDeliveryState('idle');
-      setOrder(null);
-      setRoute([]);
+    if (!nextStatus && incomingOffer) {
+      setIncomingOffer(null);
       hideBottomSheet();
     }
   };
 
-  const acceptOrder = async () => {
-    if (!order) return;
+  const acceptOffer = async () => {
+    if (!incomingOffer) return;
+    const offer = incomingOffer;
     try {
-      await livreurAPI.acceptOrder(order.id);
+      await livreurAPI.acceptOrder(offer.id);
     } catch (err) {
       Alert.alert('Trop tard !', err.response?.data?.error || "Cette commande n'est plus disponible.");
-      setDeliveryState('idle');
-      setOrder(null);
+      setIncomingOffer(null);
       hideBottomSheet();
       return;
     }
-    setDeliveryState('accepted');
-    fetchRoute(order.restaurant_lat, order.restaurant_lng);
-    Animated.spring(slideAnim, { toValue: height - 150, friction: 8, useNativeDriver: true }).start();
+    const accepted = { ...offer, pickedUp: false };
+    setActiveOrders((prev) => [...prev, accepted]);
+    setIncomingOffer(null);
+    hideBottomSheet();
+    selectOrder(accepted);
   };
 
-  const declineOrder = () => {
-    if (order) declinedIdsRef.current.add(order.id);
-    setDeliveryState('idle');
-    setOrder(null);
+  const declineOffer = () => {
+    if (incomingOffer) declinedIdsRef.current.add(incomingOffer.id);
+    setIncomingOffer(null);
     hideBottomSheet();
   };
 
-  const updateStatus = async (nextState) => {
-    if (nextState === 'delivering') {
-      setDeliveryState(nextState);
-      fetchRoute(order?.latitude, order?.longitude);
+  const markPickedUp = (orderObj) => {
+    const updated = { ...orderObj, pickedUp: true };
+    setActiveOrders((prev) => prev.map((o) => (o.id === orderObj.id ? updated : o)));
+    if (orderObj.id === selectedOrderId) selectOrder(updated);
+  };
+
+  const completeDelivery = async (orderObj) => {
+    try {
+      await livreurAPI.completeOrder(orderObj.id);
+    } catch (err) {
+      Alert.alert('Erreur', err.response?.data?.error || 'Impossible de finaliser la livraison.');
       return;
     }
-    if (nextState === 'completed') {
-      try {
-        await livreurAPI.completeOrder(order.id);
-      } catch (err) {
-        Alert.alert('Erreur', err.response?.data?.error || 'Impossible de finaliser la livraison.');
-        return;
-      }
-      setDeliveryState('completed');
-      setRoute([]);
-      try {
-        const stats = await livreurAPI.getStats();
-        setTodayEarnings(parseFloat(stats?.today?.total_amount) || 0);
-      } catch (err) {
-        console.error('Erreur stats:', err);
-      }
-      setTimeout(() => {
-        setOrder(null);
-        setDeliveryState('idle');
-        hideBottomSheet();
-      }, 3000);
-      return;
+    setJustCompleted(orderObj);
+    setTimeout(() => setJustCompleted(null), 3000);
+
+    const remaining = activeOrders.filter((o) => o.id !== orderObj.id);
+    setActiveOrders(remaining);
+    if (orderObj.id === selectedOrderId) {
+      if (remaining.length > 0) selectOrder(remaining[0]);
+      else { setSelectedOrderId(null); setRoute([]); }
     }
-    setDeliveryState(nextState);
+    try {
+      const stats = await livreurAPI.getStats();
+      setTodayEarnings(parseFloat(stats?.today?.total_amount) || 0);
+    } catch (err) {
+      console.error('Erreur stats:', err);
+    }
   };
 
   const toggleTips = async () => {
@@ -352,8 +374,8 @@ export default function App() {
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#f97316" /></View>;
 
-  const restoDist = haversineKm(location?.latitude, location?.longitude, order?.restaurant_lat, order?.restaurant_lng);
-  const clientDist = haversineKm(order?.restaurant_lat, order?.restaurant_lng, order?.latitude, order?.longitude);
+  const restoDist = haversineKm(location?.latitude, location?.longitude, incomingOffer?.restaurant_lat, incomingOffer?.restaurant_lng);
+  const clientDist = haversineKm(incomingOffer?.restaurant_lat, incomingOffer?.restaurant_lng, incomingOffer?.latitude, incomingOffer?.longitude);
 
   return (
     <View style={styles.container}>
@@ -377,11 +399,18 @@ export default function App() {
           <Polyline coordinates={route} strokeWidth={6} strokeColor="#f97316" />
         )}
 
-        {(deliveryState === 'accepted' || deliveryState === 'pickup') && order?.restaurant_lat ? (
-           <Marker type="restaurant" coordinate={{ latitude: order.restaurant_lat, longitude: order.restaurant_lng }} title={order.restaurant_name} />
-        ) : deliveryState === 'delivering' && order?.latitude ? (
-           <Marker type="client" coordinate={{ latitude: order.latitude, longitude: order.longitude }} title={order.client_name} />
-        ) : null}
+        {activeOrders.map((o) => {
+          const stop = nextStop(o);
+          if (!stop.lat || !stop.lng) return null;
+          return (
+            <Marker
+              key={o.id}
+              type={stop.type}
+              coordinate={{ latitude: stop.lat, longitude: stop.lng }}
+              title={stop.label}
+            />
+          );
+        })}
       </MapView>
 
       {/* HEADER CONTROLS */}
@@ -394,52 +423,41 @@ export default function App() {
         <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}><Ionicons name="log-out-outline" size={20} color="#1f2937" /></TouchableOpacity>
       </View>
 
-      {/* OFFLINE OVERLAY */}
-      {!isOnline && deliveryState === 'idle' && (
-        <View style={styles.overlay}>
-           <TouchableOpacity style={styles.goBtn} onPress={handleToggleStatus}>
-             <Text style={styles.goText}>START</Text>
-           </TouchableOpacity>
-           <Text style={styles.statusMsg}>Hors ligne • Appuyez pour commencer</Text>
-        </View>
-      )}
-
-      {isOnline && deliveryState === 'idle' && (
-        <View style={styles.onlineStatus}>
-           <TouchableOpacity style={styles.stopBtn} onPress={handleToggleStatus}>
-             <Text style={styles.stopText}>STOP</Text>
-           </TouchableOpacity>
-           <View style={styles.searchBox}>
-              <ActivityIndicator size="small" color="#10b981" />
-              <Text style={styles.searchText}>Recherche de missions...</Text>
-           </View>
-        </View>
-      )}
+      {/* STATUT EN LIGNE / HORS LIGNE — toujours visible, independant du nombre de livraisons en cours */}
+      <View style={styles.statusBar}>
+        <View style={[styles.statusDot, { backgroundColor: isOnline ? '#10b981' : '#9ca3af' }]} />
+        <Text style={styles.statusBarText}>
+          {isOnline ? (activeOrders.length > 0 ? 'En ligne • autres missions' : 'En ligne • recherche...') : 'Hors ligne'}
+        </Text>
+        <TouchableOpacity style={[styles.statusToggleBtn, isOnline && styles.statusToggleBtnActive]} onPress={handleToggleStatus}>
+          <Text style={styles.statusToggleText}>{isOnline ? 'STOP' : 'START'}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* INCOMING ORDER SHEET */}
       <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
         <View style={styles.sheetHeader}>
            <Text style={styles.sheetTitle}>Nouvelle Livraison ! 📦</Text>
-           {order?.is_express && <View style={styles.expressBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.expressText}>EXPRESS</Text></View>}
+           {incomingOffer?.is_express && <View style={styles.expressBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.expressText}>EXPRESS</Text></View>}
            <View style={styles.timerBadge}><Text style={styles.timerText}>45s</Text></View>
         </View>
         <View style={styles.missionCard}>
-           <Text style={styles.missionPrice}>+{Number(order?.delivery_fee || 0).toLocaleString()} FCFA</Text>
+           <Text style={styles.missionPrice}>+{Number(incomingOffer?.delivery_fee || 0).toLocaleString()} FCFA</Text>
            <View style={styles.locRow}>
               <View style={styles.dotResto} />
-              <Text style={styles.locText}>{order?.restaurant_name || 'Restaurant'}{restoDist != null ? ` (${restoDist}km)` : ''}</Text>
+              <Text style={styles.locText}>{incomingOffer?.restaurant_name || 'Restaurant'}{restoDist != null ? ` (${restoDist}km)` : ''}</Text>
            </View>
            <View style={styles.line} />
            <View style={styles.locRow}>
               <View style={styles.dotClient} />
-              <Text style={styles.locText}>{order?.delivery_address || 'Client'}{clientDist != null ? ` (${clientDist}km)` : ''}</Text>
+              <Text style={styles.locText}>{incomingOffer?.delivery_address || 'Client'}{clientDist != null ? ` (${clientDist}km)` : ''}</Text>
            </View>
         </View>
         <View style={styles.btnRow}>
-           <TouchableOpacity style={styles.decline} onPress={declineOrder}>
+           <TouchableOpacity style={styles.decline} onPress={declineOffer}>
               <Text style={styles.declineText}>Ignorer</Text>
            </TouchableOpacity>
-           <TouchableOpacity style={styles.accept} onPress={acceptOrder}>
+           <TouchableOpacity style={styles.accept} onPress={acceptOffer}>
               <Text style={styles.acceptText}>ACCEPTER</Text>
            </TouchableOpacity>
         </View>
@@ -470,37 +488,48 @@ export default function App() {
       )}
 
       {/* COMPLETED OVERLAY */}
-      {deliveryState === 'completed' && (
+      {justCompleted && (
         <View style={styles.completedOverlay}>
           <View style={styles.completedCard}>
             <Text style={styles.completedEmoji}>🎉</Text>
             <Text style={styles.completedTitle}>Livraison terminée !</Text>
-            <Text style={styles.completedAmount}>+{Number(order?.delivery_fee || 0).toLocaleString()} F</Text>
-            {order?.tip_amount > 0 && <Text style={styles.completedTip}>Pourboire: +{order.tip_amount} F</Text>}
+            <Text style={styles.completedAmount}>+{Number(justCompleted?.delivery_fee || 0).toLocaleString()} F</Text>
+            {justCompleted?.tip_amount > 0 && <Text style={styles.completedTip}>Pourboire: +{justCompleted.tip_amount} F</Text>}
           </View>
         </View>
       )}
 
-      {/* ACTIVE BAR */}
-      {deliveryState !== 'idle' && deliveryState !== 'incoming' && deliveryState !== 'completed' && (
-        <View style={styles.activeBar}>
-           <View style={{ flex: 1 }}>
-              <Text style={styles.activeType}>
-                {deliveryState === 'accepted' ? 'Vers le resto' : deliveryState === 'delivering' ? 'Vers le client' : 'Arrivé !'}
-              </Text>
-              <Text style={styles.activeDest}>
-                {deliveryState === 'delivering' ? (order?.delivery_address || 'Client') : (order?.restaurant_name || 'Restaurant')}
-              </Text>
-           </View>
-           <TouchableOpacity style={styles.updateBtn} onPress={() => {
-              if (deliveryState === 'accepted') updateStatus('pickup');
-              else if (deliveryState === 'pickup') updateStatus('delivering');
-              else if (deliveryState === 'delivering') updateStatus('completed');
-           }}>
-              <Text style={styles.updateText}>
-                {deliveryState === 'accepted' ? 'ARRIVÉ' : deliveryState === 'pickup' ? 'RÉCUPÉRÉ' : 'LIVRÉ'}
-              </Text>
-           </TouchableOpacity>
+      {/* LIVRAISONS ACTIVES — liste, le livreur choisit lui-meme l'ordre des arrets */}
+      {activeOrders.length > 0 && (
+        <View style={styles.ordersPanel}>
+          <Text style={styles.ordersPanelTitle}>
+            {activeOrders.length} livraison{activeOrders.length > 1 ? 's' : ''} en cours
+          </Text>
+          <ScrollView style={styles.ordersScroll} showsVerticalScrollIndicator={false}>
+            {activeOrders.map((o) => {
+              const stop = nextStop(o);
+              const isSelected = o.id === selectedOrderId;
+              return (
+                <TouchableOpacity
+                  key={o.id}
+                  style={[styles.orderCard, isSelected && styles.orderCardSelected]}
+                  onPress={() => selectOrder(o)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.orderCardType}>{o.pickedUp ? 'VERS LE CLIENT' : 'VERS LE RESTO'}</Text>
+                    <Text style={styles.orderCardDest} numberOfLines={1}>{stop.label}</Text>
+                    <Text style={styles.orderCardPrice}>+{Number(o.delivery_fee || 0).toLocaleString()} FCFA</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.orderCardBtn, o.pickedUp && styles.orderCardBtnDeliver]}
+                    onPress={() => (o.pickedUp ? completeDelivery(o) : markPickedUp(o))}
+                  >
+                    <Text style={styles.orderCardBtnText}>{o.pickedUp ? 'LIVRÉ' : 'RÉCUPÉRÉ'}</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -528,16 +557,12 @@ const styles = StyleSheet.create({
   loginButton: { width: '100%', backgroundColor: '#f97316', borderRadius: 15, paddingVertical: 16, alignItems: 'center', marginTop: 5 },
   loginButtonText: { color: '#fff', fontWeight: '900', fontSize: 15 },
 
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center' },
-  goBtn: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center', elevation: 10 },
-  goText: { color: '#fff', fontWeight: '900', fontSize: 18 },
-  statusMsg: { marginTop: 20, color: '#374151', fontWeight: 'bold' },
-
-  onlineStatus: { position: 'absolute', bottom: 40, alignSelf: 'center', alignItems: 'center' },
-  stopBtn: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', elevation: 10 },
-  stopText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-  searchBox: { marginTop: 15, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 30, elevation: 5 },
-  searchText: { marginLeft: 10, fontWeight: 'bold', color: '#10b981', fontSize: 12 },
+  statusBar: { position: 'absolute', top: 105, left: 20, right: 20, backgroundColor: '#fff', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  statusBarText: { flex: 1, fontSize: 12, fontWeight: 'bold', color: '#374151' },
+  statusToggleBtn: { backgroundColor: '#111827', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12 },
+  statusToggleBtnActive: { backgroundColor: '#ef4444' },
+  statusToggleText: { color: '#fff', fontWeight: '900', fontSize: 11 },
 
   sheet: { position: 'absolute', left: 0, right: 0, height: 450, backgroundColor: '#fff', borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 30, elevation: 25 },
   sheetTitle: { fontSize: 22, fontBlack: '900', color: '#111827' },
@@ -557,20 +582,10 @@ const styles = StyleSheet.create({
   accept: { flex: 2, backgroundColor: '#10b981', borderRadius: 20, paddingVertical: 18, alignItems: 'center', elevation: 5 },
   acceptText: { color: '#fff', fontWeight: '900', fontSize: 16 },
 
-  activeBar: { position: 'absolute', bottom: 30, left: 15, right: 15, backgroundColor: '#111827', borderRadius: 25, padding: 20, flexDirection: 'row', alignItems: 'center', elevation: 15 },
-  activeType: { color: '#9ca3af', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
-  activeDest: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginTop: 2 },
-  updateBtn: { backgroundColor: '#f97316', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 15 },
-  updateText: { color: '#fff', fontWeight: '900', fontSize: 12 },
-
-  courierMarker: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(249, 115, 22, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  courierCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#f97316', borderWeight: 3, borderColor: '#fff' },
-  destMarker: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center', elevation: 5 },
-
   expressBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f97316', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginRight: 10 },
   expressText: { color: '#fff', fontWeight: '900', fontSize: 10, marginLeft: 3 },
 
-  tipsPanel: { position: 'absolute', top: 110, left: 15, right: 15, backgroundColor: '#fff', borderRadius: 25, padding: 25, elevation: 20, zIndex: 100 },
+  tipsPanel: { position: 'absolute', top: 160, left: 15, right: 15, backgroundColor: '#fff', borderRadius: 25, padding: 25, elevation: 20, zIndex: 100 },
   tipsPanelTitle: { fontSize: 18, fontWeight: '900', color: '#111827', marginBottom: 15 },
   tipsTotalCard: { backgroundColor: '#f0fdf4', borderRadius: 15, padding: 15, alignItems: 'center', marginBottom: 15 },
   tipsTotalLabel: { fontSize: 10, color: '#6b7280', fontWeight: 'bold', textTransform: 'uppercase' },
@@ -589,4 +604,16 @@ const styles = StyleSheet.create({
   completedTitle: { fontSize: 22, fontWeight: '900', color: '#111827' },
   completedAmount: { fontSize: 36, fontWeight: '900', color: '#10b981', marginTop: 10 },
   completedTip: { fontSize: 14, color: '#f97316', fontWeight: 'bold', marginTop: 5 },
+
+  ordersPanel: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 10, elevation: 20, maxHeight: 320 },
+  ordersPanelTitle: { fontSize: 13, fontWeight: '900', color: '#111827', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  ordersScroll: { maxHeight: 250 },
+  orderCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 2, borderColor: 'transparent' },
+  orderCardSelected: { borderColor: '#f97316', backgroundColor: '#fff7ed' },
+  orderCardType: { fontSize: 9, fontWeight: '900', color: '#9ca3af', letterSpacing: 0.5 },
+  orderCardDest: { fontSize: 14, fontWeight: 'bold', color: '#111827', marginTop: 2 },
+  orderCardPrice: { fontSize: 12, fontWeight: '900', color: '#10b981', marginTop: 4 },
+  orderCardBtn: { backgroundColor: '#111827', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, marginLeft: 10 },
+  orderCardBtnDeliver: { backgroundColor: '#f97316' },
+  orderCardBtnText: { color: '#fff', fontWeight: '900', fontSize: 11 },
 });
