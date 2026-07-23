@@ -410,6 +410,8 @@ if (USE_POSTGRES) {
         severity TEXT CHECK(severity IN ('low','medium','high','critical')),
         description TEXT, is_resolved INTEGER DEFAULT 0, resolved_by INTEGER REFERENCES users(id),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+      `CREATE TABLE IF NOT EXISTS platform_settings (
+        key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     ];
     for (const t of tables) {
       db.exec(t);
@@ -436,9 +438,23 @@ if (USE_POSTGRES) {
       'ALTER TABLE users ADD COLUMN otp_expires DATETIME',
       'ALTER TABLE users ADD COLUMN two_fa_verified INTEGER DEFAULT 0',
       'ALTER TABLE users ADD COLUMN is_online INTEGER DEFAULT 0',
+      'ALTER TABLE orders ADD COLUMN restaurant_commission_pct REAL DEFAULT 0',
+      'ALTER TABLE orders ADD COLUMN courier_commission_pct REAL DEFAULT 0',
     ];
     for (const stmt of alterStatements) {
       try { db.exec(stmt); } catch(e) { /* column may already exist */ }
+    }
+
+    const defaultSettings = {
+      commission_restaurant_pct: '15',
+      commission_courier_pct: '10',
+      delivery_fee_base: '500',
+      delivery_fee_per_km: '200',
+    };
+    for (const [key, value] of Object.entries(defaultSettings)) {
+      try {
+        db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run(key, value);
+      } catch (e) { /* ignore */ }
     }
   }
 }
@@ -502,6 +518,7 @@ async function _createPostgresTables(client) {
   // Wave 3 tables
   await client.query(`CREATE TABLE IF NOT EXISTS photo_reviews (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), order_id INTEGER REFERENCES orders(id), restaurant_id INTEGER REFERENCES users(id), rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5), comment TEXT, photo_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await client.query(`CREATE TABLE IF NOT EXISTS push_notifications (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), title VARCHAR(200) NOT NULL, body TEXT, icon VARCHAR(10) DEFAULT '🔔', type VARCHAR(30) DEFAULT 'general', read BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS platform_settings (key VARCHAR(50) PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 
   // Add new columns to existing tables
   const alterCols = [
@@ -524,9 +541,26 @@ async function _createPostgresTables(client) {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMP',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS two_fa_verified BOOLEAN DEFAULT false',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false',
+    'ALTER TABLE orders ADD COLUMN IF NOT EXISTS restaurant_commission_pct DECIMAL(5,2) DEFAULT 0',
+    'ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_commission_pct DECIMAL(5,2) DEFAULT 0',
   ];
   for (const stmt of alterCols) {
     try { await client.query(stmt); } catch(e) { /* column may already exist */ }
+  }
+
+  // Valeurs par defaut des parametres plateforme (commissions + bareme de
+  // livraison), modifiables ensuite via PUT /admin/settings — INSERT ... ON
+  // CONFLICT DO NOTHING pour ne pas ecraser une valeur deja configuree.
+  const defaultSettings = {
+    commission_restaurant_pct: '15',
+    commission_courier_pct: '10',
+    delivery_fee_base: '500',
+    delivery_fee_per_km: '200',
+  };
+  for (const [key, value] of Object.entries(defaultSettings)) {
+    try {
+      await client.query('INSERT INTO platform_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [key, value]);
+    } catch (e) { /* ignore */ }
   }
 
   // courier_locations.courier_id n'avait aucune contrainte UNIQUE alors que

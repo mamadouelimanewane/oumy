@@ -1,6 +1,8 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { getSettings } = require('../lib/settings');
+const { calculateDeliveryFee } = require('../lib/delivery');
 
 const router = express.Router();
 
@@ -83,16 +85,26 @@ router.post('/:orderId', async (req, res) => {
       (sum, item) => sum + (parseFloat(item.price) * item.quantity), 0
     );
 
+    // Meme adresse de livraison que l'originale, mais frais et commissions
+    // recalcules avec le bareme actuel (peut avoir change depuis).
+    const restaurantResult = await pool.query('SELECT latitude, longitude FROM users WHERE id = $1', [orig.restaurant_id]);
+    const settings = await getSettings();
+    const deliveryFee = calculateDeliveryFee(
+      restaurantResult.rows[0]?.latitude, restaurantResult.rows[0]?.longitude, orig.latitude, orig.longitude,
+      settings.delivery_fee_base, settings.delivery_fee_per_km
+    );
+
     // Create new order
     const newOrder = await pool.query(
       `INSERT INTO orders (client_id, restaurant_id, status, total_amount,
-        delivery_fee, delivery_address, latitude, longitude, payment_method, payment_status)
-       VALUES ($1, $2, 'nouvelle', $3, $4, $5, $6, $7, $8, 'en_attente')
+        delivery_fee, delivery_address, latitude, longitude, payment_method, payment_status,
+        restaurant_commission_pct, courier_commission_pct)
+       VALUES ($1, $2, 'nouvelle', $3, $4, $5, $6, $7, $8, 'en_attente', $9, $10)
        RETURNING *`,
       [
-        req.user.id, orig.restaurant_id, totalAmount, orig.delivery_fee || 0,
+        req.user.id, orig.restaurant_id, totalAmount, deliveryFee,
         orig.delivery_address, orig.latitude, orig.longitude,
-        orig.payment_method || 'cash'
+        orig.payment_method || 'cash', settings.commission_restaurant_pct, settings.commission_courier_pct
       ]
     );
 

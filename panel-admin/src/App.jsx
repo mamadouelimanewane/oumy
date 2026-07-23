@@ -265,6 +265,9 @@ function App() {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoForm, setPromoForm] = useState({ code: '', discount_type: 'percentage', discount_value: '', min_order_amount: 0 });
+  const [settingsForm, setSettingsForm] = useState({ commission_restaurant_pct: '', commission_courier_pct: '', delivery_fee_base: '', delivery_fee_per_km: '' });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('admin_token');
@@ -387,6 +390,38 @@ function App() {
     } catch (err) { console.error(err); }
   }, []);
 
+  const fetchSettings = useCallback(async () => {
+    try {
+      const data = await adminAPI.getSettings();
+      if (data && !data.error) {
+        setSettingsForm({
+          commission_restaurant_pct: String(data.commission_restaurant_pct),
+          commission_courier_pct: String(data.commission_courier_pct),
+          delivery_fee_base: String(data.delivery_fee_base),
+          delivery_fee_per_km: String(data.delivery_fee_per_km),
+        });
+      }
+    } catch (err) { console.error('Fetch settings error:', err); }
+  }, []);
+
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsMessage('');
+    try {
+      const data = await adminAPI.updateSettings(settingsForm);
+      if (data.error) {
+        setSettingsMessage(data.error);
+      } else {
+        setSettingsMessage('Paramètres enregistrés ✅');
+        setTimeout(() => setSettingsMessage(''), 3000);
+      }
+    } catch (err) {
+      setSettingsMessage('Erreur de connexion au serveur');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchDashboard();
@@ -405,7 +440,8 @@ function App() {
     if (user && activeTab === 'payouts') fetchPayouts();
     if (user && activeTab === 'deposits') fetchDeposits();
     if (user && activeTab === 'promotions') fetchPromos();
-  }, [user, activeTab, fetchRestaurants, fetchCouriers, fetchClients, fetchOrders, fetchPayouts, fetchDeposits, fetchPromos]);
+    if (user && activeTab === 'settings') fetchSettings();
+  }, [user, activeTab, fetchRestaurants, fetchCouriers, fetchClients, fetchOrders, fetchPayouts, fetchDeposits, fetchPromos, fetchSettings]);
 
   const handleLogin = (userData, tokenData) => { setUser(userData); setToken(tokenData); };
 
@@ -1196,14 +1232,35 @@ function App() {
                      <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-400" /> Paramètres Financiers</h3>
                      <div className="space-y-6">
                         <div>
-                           <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Commission Plateforme (%)</label>
-                           <input type="number" defaultValue="15" className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold outline-none ring-indigo-500/20 focus:ring-4 transition-all" />
+                           <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Commission Restaurant (%)</label>
+                           <p className="text-[10px] text-slate-500 mb-2">Prélevée sur le prix des repas (hors frais de livraison) à chaque commande livrée.</p>
+                           <input type="number" min="0" max="100" step="0.5" value={settingsForm.commission_restaurant_pct}
+                             onChange={(e) => setSettingsForm({ ...settingsForm, commission_restaurant_pct: e.target.value })}
+                             className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold outline-none ring-indigo-500/20 focus:ring-4 transition-all" />
                         </div>
                         <div>
-                           <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Frais de Livraison Fixe (Dakar)</label>
-                           <input type="number" defaultValue="1000" className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold outline-none ring-indigo-500/20 focus:ring-4 transition-all" />
+                           <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Commission Livreur (%)</label>
+                           <p className="text-[10px] text-slate-500 mb-2">Prélevée sur les frais de livraison du livreur à chaque commande livrée.</p>
+                           <input type="number" min="0" max="100" step="0.5" value={settingsForm.commission_courier_pct}
+                             onChange={(e) => setSettingsForm({ ...settingsForm, commission_courier_pct: e.target.value })}
+                             className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold outline-none ring-indigo-500/20 focus:ring-4 transition-all" />
                         </div>
-                        <button className="w-full py-3 bg-indigo-600 text-white font-black rounded-xl shadow-lg shadow-indigo-600/30">Sauvegarder les changements</button>
+                        <div>
+                           <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Frais de Livraison — Base (FCFA)</label>
+                           <input type="number" min="0" value={settingsForm.delivery_fee_base}
+                             onChange={(e) => setSettingsForm({ ...settingsForm, delivery_fee_base: e.target.value })}
+                             className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold outline-none ring-indigo-500/20 focus:ring-4 transition-all" />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Frais de Livraison — Par km (FCFA)</label>
+                           <input type="number" min="0" value={settingsForm.delivery_fee_per_km}
+                             onChange={(e) => setSettingsForm({ ...settingsForm, delivery_fee_per_km: e.target.value })}
+                             className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-white font-bold outline-none ring-indigo-500/20 focus:ring-4 transition-all" />
+                        </div>
+                        {!!settingsMessage && <p className="text-xs font-bold text-center text-indigo-300">{settingsMessage}</p>}
+                        <button onClick={handleSaveSettings} disabled={settingsSaving} className="w-full py-3 bg-indigo-600 text-white font-black rounded-xl shadow-lg shadow-indigo-600/30 disabled:opacity-50">
+                           {settingsSaving ? 'Enregistrement...' : 'Sauvegarder les changements'}
+                        </button>
                      </div>
                   </div>
                   <div className="glass-panel p-8 rounded-3xl border border-slate-700/30">

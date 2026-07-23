@@ -3,6 +3,8 @@ const { pool } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
+const { getSettings } = require('../lib/settings');
+const { calculateDeliveryFee } = require('../lib/delivery');
 
 const router = express.Router();
 
@@ -201,15 +203,27 @@ router.post('/:id/finalize', [
 
     const { delivery_address, payment_method, latitude, longitude } = req.body;
 
+    const restaurantResult = await pool.query(
+      'SELECT latitude, longitude FROM users WHERE id = $1',
+      [groupOrder.rows[0].restaurant_id]
+    );
+    const settings = await getSettings();
+    const deliveryFee = calculateDeliveryFee(
+      restaurantResult.rows[0]?.latitude, restaurantResult.rows[0]?.longitude, latitude, longitude,
+      settings.delivery_fee_base, settings.delivery_fee_per_km
+    );
+
     // Create actual order
     const newOrder = await pool.query(
       `INSERT INTO orders (client_id, restaurant_id, status, total_amount, delivery_fee,
-        delivery_address, latitude, longitude, payment_method, payment_status)
-       VALUES ($1, $2, 'nouvelle', $3, $4, $5, $6, $7, $8, 'en_attente')
+        delivery_address, latitude, longitude, payment_method, payment_status,
+        restaurant_commission_pct, courier_commission_pct)
+       VALUES ($1, $2, 'nouvelle', $3, $4, $5, $6, $7, $8, 'en_attente', $9, $10)
        RETURNING *`,
       [
-        req.user.id, groupOrder.rows[0].restaurant_id, totalAmount, 0,
-        delivery_address, latitude || null, longitude || null, payment_method
+        req.user.id, groupOrder.rows[0].restaurant_id, totalAmount, deliveryFee,
+        delivery_address, latitude || null, longitude || null, payment_method,
+        settings.commission_restaurant_pct, settings.commission_courier_pct
       ]
     );
 

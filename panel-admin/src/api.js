@@ -88,6 +88,19 @@ export const adminAPI = {
     const res = await fetchWithAuth(`/admin/couriers/${id}/stats`);
     return res.json();
   },
+
+  getSettings: async () => {
+    const res = await fetchWithAuth('/admin/settings');
+    return res.json();
+  },
+
+  updateSettings: async (settings) => {
+    const res = await fetchWithAuth('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+    return res.json();
+  },
 };
 
 export const payoutsAPI = {

@@ -4,25 +4,10 @@ const { pool } = require('../config/database');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 const { paginate, paginatedResponse } = require('../middleware/pagination');
 const { sendPushToUser } = require('../lib/webpush');
+const { getSettings } = require('../lib/settings');
+const { calculateDeliveryFee } = require('../lib/delivery');
 
 const router = express.Router();
-
-// Frais de livraison (Haversine) : 500 FCFA de base + 200 FCFA/km, 500 FCFA
-// par défaut si les coordonnées du restaurant ou du point de livraison
-// manquent.
-function calculateDeliveryFee(restLat, restLng, lat, lng) {
-  if (!restLat || !restLng || !lat || !lng) return 500;
-  const R = 6371;
-  const dLat = (parseFloat(lat) - parseFloat(restLat)) * Math.PI / 180;
-  const dLng = (parseFloat(lng) - parseFloat(restLng)) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(parseFloat(restLat) * Math.PI / 180) *
-            Math.cos(parseFloat(lat) * Math.PI / 180) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance_km = Math.round(R * c * 10) / 10;
-  return 500 + Math.round(distance_km * 200);
-}
 
 // Récupérer tous les restaurants actifs (paginé, avec note moyenne et horaires)
 router.get('/restaurants', async (req, res) => {
@@ -197,7 +182,8 @@ router.post('/orders', authenticate, [
     }
 
     const restaurant = restaurantCheck.rows[0];
-    const delivery_fee = calculateDeliveryFee(restaurant.latitude, restaurant.longitude, latitude, longitude);
+    const settings = await getSettings();
+    const delivery_fee = calculateDeliveryFee(restaurant.latitude, restaurant.longitude, latitude, longitude, settings.delivery_fee_base, settings.delivery_fee_per_km);
 
     // Calculer le total et vérifier les articles
     let total_amount = 0;
@@ -267,11 +253,14 @@ router.post('/orders', authenticate, [
     try {
       await client.query('BEGIN');
 
+      // Le taux de commission est fige sur la commande au moment de la
+      // creation : si l'admin change le taux plus tard, ca ne doit pas
+      // modifier retroactivement les gains d'une commande deja passee.
       const orderResult = await client.query(
-        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, discount_amount, promo_code, delivery_fee)
-         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9, $10)
+        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, discount_amount, promo_code, delivery_fee, restaurant_commission_pct, courier_commission_pct)
+         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
-        [client_id, restaurant_id, final_amount, payment_method, delivery_address, latitude, longitude, discount_amount, applied_promo, delivery_fee]
+        [client_id, restaurant_id, final_amount, payment_method, delivery_address, latitude, longitude, discount_amount, applied_promo, delivery_fee, settings.commission_restaurant_pct, settings.commission_courier_pct]
       );
 
       // Incrémenter l'utilisation du code promo
@@ -478,13 +467,13 @@ router.get('/delivery-fee', authenticate, async (req, res) => {
     }
 
     const restaurant = restaurantResult.rows[0];
+    const settings = await getSettings();
 
-    // Si le restaurant n'a pas de coordonnées, frais par défaut
+    // Si le restaurant n'a pas de coordonnées, frais de base
     if (!restaurant.latitude || !restaurant.longitude) {
-      return res.json({ distance_km: 0, delivery_fee: 500 });
+      return res.json({ distance_km: 0, delivery_fee: settings.delivery_fee_base });
     }
 
-    // Calcul Haversine
     const R = 6371; // Rayon terre en km
     const dLat = (parseFloat(lat) - parseFloat(restaurant.latitude)) * Math.PI / 180;
     const dLng = (parseFloat(lng) - parseFloat(restaurant.longitude)) * Math.PI / 180;
@@ -495,8 +484,7 @@ router.get('/delivery-fee', authenticate, async (req, res) => {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const distance_km = Math.round(R * c * 10) / 10;
 
-    // Barème: 500 FCFA base + 200 FCFA/km
-    const delivery_fee = 500 + Math.round(distance_km * 200);
+    const delivery_fee = settings.delivery_fee_base + Math.round(distance_km * settings.delivery_fee_per_km);
 
     res.json({ distance_km, delivery_fee });
   } catch (err) {
@@ -554,19 +542,30 @@ router.post('/orders/:id/reorder', authenticate, async (req, res) => {
       };
     });
 
+    const newLat = latitude || originalOrder.latitude;
+    const newLng = longitude || originalOrder.longitude;
+    const restaurantResult = await pool.query(
+      'SELECT latitude, longitude FROM users WHERE id = $1',
+      [originalOrder.restaurant_id]
+    );
+    const settings = await getSettings();
+    const delivery_fee = calculateDeliveryFee(
+      restaurantResult.rows[0]?.latitude, restaurantResult.rows[0]?.longitude, newLat, newLng,
+      settings.delivery_fee_base, settings.delivery_fee_per_km
+    );
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       const orderResult = await client.query(
-        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude)
-         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7)
+        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, delivery_fee, restaurant_commission_pct, courier_commission_pct)
+         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [req.user.id, originalOrder.restaurant_id, total_amount,
          payment_method || originalOrder.payment_method,
          delivery_address || originalOrder.delivery_address,
-         latitude || originalOrder.latitude,
-         longitude || originalOrder.longitude]
+         newLat, newLng, delivery_fee, settings.commission_restaurant_pct, settings.commission_courier_pct]
       );
 
       const newOrder = orderResult.rows[0];

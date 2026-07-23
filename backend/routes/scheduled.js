@@ -2,6 +2,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { getSettings } = require('../lib/settings');
+const { calculateDeliveryFee } = require('../lib/delivery');
 
 const router = express.Router();
 
@@ -31,13 +33,14 @@ router.post('/orders', authenticate, [
 
     // Vérifier que le restaurant existe
     const restaurantCheck = await pool.query(
-      'SELECT id FROM users WHERE id = $1 AND role = $2 AND is_active = true',
+      'SELECT id, latitude, longitude FROM users WHERE id = $1 AND role = $2 AND is_active = true',
       [restaurant_id, 'restaurant']
     );
 
     if (restaurantCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Restaurant non trouvé' });
     }
+    const restaurant = restaurantCheck.rows[0];
 
     // Calculer le total et vérifier les articles
     let total_amount = 0;
@@ -101,6 +104,8 @@ router.post('/orders', authenticate, [
     }
 
     const final_amount = total_amount - discount_amount;
+    const settings = await getSettings();
+    const delivery_fee = calculateDeliveryFee(restaurant.latitude, restaurant.longitude, latitude, longitude, settings.delivery_fee_base, settings.delivery_fee_per_km);
 
     // Créer la commande programmée
     const dbClient = await pool.connect();
@@ -109,10 +114,10 @@ router.post('/orders', authenticate, [
 
       // Créer la commande avec status 'nouvelle' et scheduled_for
       const orderResult = await dbClient.query(
-        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, discount_amount, promo_code, scheduled_for)
-         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9, $10)
+        `INSERT INTO orders (client_id, restaurant_id, status, total_amount, payment_method, payment_status, delivery_address, latitude, longitude, discount_amount, promo_code, scheduled_for, delivery_fee, restaurant_commission_pct, courier_commission_pct)
+         VALUES ($1, $2, 'nouvelle', $3, $4, 'en_attente', $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
-        [client_id, restaurant_id, final_amount, payment_method, delivery_address, latitude, longitude, discount_amount, applied_promo, scheduledDate]
+        [client_id, restaurant_id, final_amount, payment_method, delivery_address, latitude, longitude, discount_amount, applied_promo, scheduledDate, delivery_fee, settings.commission_restaurant_pct, settings.commission_courier_pct]
       );
 
       // Incrémenter l'utilisation du code promo

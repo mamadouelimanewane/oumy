@@ -25,12 +25,13 @@ router.post('/request', authorize('restaurant', 'livreur'), [
       return res.status(400).json({ error: 'Vous avez déjà une demande de retrait en attente' });
     }
 
-    // Calculer le solde disponible (gains des commandes livrées - retraits deja
-    // payes ou en attente), pour empecher une demande de retrait superieure aux
-    // gains reels de l'utilisateur.
+    // Calculer le solde disponible (gains des commandes livrées, commission
+    // plateforme deduite selon le taux fige sur chaque commande - retraits
+    // deja payes ou en attente), pour empecher une demande de retrait
+    // superieure aux gains reels de l'utilisateur.
     const earningsQuery = req.user.role === 'livreur'
-      ? `SELECT COALESCE(SUM(delivery_fee), 0) AS total FROM orders WHERE courier_id = $1 AND status = 'livree'`
-      : `SELECT COALESCE(SUM(total_amount - COALESCE(delivery_fee, 0)), 0) AS total FROM orders WHERE restaurant_id = $1 AND status = 'livree'`;
+      ? `SELECT COALESCE(SUM(delivery_fee * (1 - COALESCE(courier_commission_pct, 0) / 100)), 0) AS total FROM orders WHERE courier_id = $1 AND status = 'livree'`
+      : `SELECT COALESCE(SUM((total_amount - COALESCE(delivery_fee, 0)) * (1 - COALESCE(restaurant_commission_pct, 0) / 100)), 0) AS total FROM orders WHERE restaurant_id = $1 AND status = 'livree'`;
     const earningsResult = await pool.query(earningsQuery, [userId]);
     const totalEarnings = parseFloat(earningsResult.rows[0].total);
 

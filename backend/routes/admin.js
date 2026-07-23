@@ -2,11 +2,63 @@ const express = require('express');
 const { pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { paginate, paginatedResponse } = require('../middleware/pagination');
+const { getSettings, DEFAULTS } = require('../lib/settings');
 
 const router = express.Router();
 
 router.use(authenticate);
 router.use(authorize('admin'));
+
+// Parametres plateforme : commissions (restaurant/livreur) + bareme de
+// livraison. Cle/valeur libre pour rester extensible sans nouvelle migration
+// a chaque nouveau parametre.
+router.get('/settings', async (req, res) => {
+  try {
+    const settings = await getSettings();
+    res.json(settings);
+  } catch (err) {
+    console.error('Get settings error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.put('/settings', async (req, res) => {
+  try {
+    const updates = {};
+    for (const key of Object.keys(DEFAULTS)) {
+      if (req.body[key] === undefined) continue;
+      const value = parseFloat(req.body[key]);
+      if (!Number.isFinite(value) || value < 0) {
+        return res.status(400).json({ error: `Valeur invalide pour ${key}` });
+      }
+      if (key.endsWith('_pct') && value > 100) {
+        return res.status(400).json({ error: `${key} ne peut pas depasser 100%` });
+      }
+      updates[key] = value;
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'Aucun parametre valide fourni' });
+    }
+
+    for (const [key, value] of Object.entries(updates)) {
+      // $2 est repete volontairement en $3 (pas $2 deux fois) : le shim
+      // SQLite local traduit chaque occurrence de $N en un ? positionnel
+      // distinct et n'accepte pas la reutilisation Postgres d'un meme
+      // parametre numerote — meme si $2 fonctionnerait tel quel sur Postgres.
+      await pool.query(
+        `INSERT INTO platform_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO UPDATE SET value = $3, updated_at = CURRENT_TIMESTAMP`,
+        [key, String(value), String(value)]
+      );
+    }
+
+    const settings = await getSettings();
+    res.json({ message: 'Paramètres mis à jour', settings });
+  } catch (err) {
+    console.error('Update settings error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 // Vue d'ensemble du dashboard
 router.get('/dashboard', async (req, res) => {

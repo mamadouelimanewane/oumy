@@ -24,13 +24,16 @@ router.post('/location', [
     const { latitude, longitude } = req.body;
     const courierId = req.user.id;
 
-    // Upsert de la position
+    // Upsert de la position. $2/$3 repetes en $4/$5 (pas reutilises tels
+    // quels) : le shim SQLite du dev local traduit chaque occurrence de $N en
+    // un ? positionnel distinct et n'accepte pas la reutilisation Postgres
+    // d'un meme parametre numerote.
     await pool.query(
       `INSERT INTO courier_locations (courier_id, latitude, longitude, updated_at)
        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-       ON CONFLICT (courier_id) 
-       DO UPDATE SET latitude = $2, longitude = $3, updated_at = CURRENT_TIMESTAMP`,
-      [courierId, latitude, longitude]
+       ON CONFLICT (courier_id)
+       DO UPDATE SET latitude = $4, longitude = $5, updated_at = CURRENT_TIMESTAMP`,
+      [courierId, latitude, longitude, latitude, longitude]
     );
 
     res.json({ message: 'Position mise à jour' });
@@ -251,12 +254,13 @@ router.get('/stats', async (req, res) => {
   try {
     const courierId = req.user.id;
 
-    // Livraisons aujourd'hui (gains = delivery_fee, ce que le livreur touche
-    // reellement, pas total_amount qui est le montant total de la commande —
-    // meme convention que routes/payouts.js pour le calcul du solde retirable)
+    // Livraisons aujourd'hui (gains = delivery_fee net de la commission
+    // plateforme figee sur chaque commande, ce que le livreur touche
+    // reellement — meme convention que routes/payouts.js pour le calcul du
+    // solde retirable)
     const todayResult = await pool.query(
       `SELECT COUNT(*) as deliveries,
-              COALESCE(SUM(delivery_fee), 0) as total_amount
+              COALESCE(SUM(delivery_fee * (1 - COALESCE(courier_commission_pct, 0) / 100)), 0) as total_amount
        FROM orders
        WHERE courier_id = $1
        AND status = 'livree'
@@ -267,7 +271,7 @@ router.get('/stats', async (req, res) => {
     // Livraisons cette semaine
     const weekResult = await pool.query(
       `SELECT COUNT(*) as deliveries,
-              COALESCE(SUM(delivery_fee), 0) as total_amount
+              COALESCE(SUM(delivery_fee * (1 - COALESCE(courier_commission_pct, 0) / 100)), 0) as total_amount
        FROM orders
        WHERE courier_id = $1
        AND status = 'livree'
@@ -278,7 +282,7 @@ router.get('/stats', async (req, res) => {
     // Total
     const totalResult = await pool.query(
       `SELECT COUNT(*) as deliveries,
-              COALESCE(SUM(delivery_fee), 0) as total_amount
+              COALESCE(SUM(delivery_fee * (1 - COALESCE(courier_commission_pct, 0) / 100)), 0) as total_amount
        FROM orders
        WHERE courier_id = $1 AND status = 'livree'`,
       [courierId]
