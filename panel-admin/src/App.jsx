@@ -301,7 +301,7 @@ function App() {
         const next = {};
         couriers.forEach((c) => {
           if (c.latitude && c.longitude) {
-            next[c.id] = { lat: c.latitude, lng: c.longitude, timestamp: c.last_location };
+            next[c.id] = { lat: Number(c.latitude), lng: Number(c.longitude), timestamp: c.last_location };
           }
         });
         setFleetLocs(next);

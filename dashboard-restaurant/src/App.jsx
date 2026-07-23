@@ -315,6 +315,43 @@ function App() {
     setLoading(false);
   }, []);
 
+  // Charger les données
+  const fetchOrders = useCallback(async () => {
+    try {
+      const data = await restaurantAPI.getActiveOrders();
+      if (Array.isArray(data)) setOrders(data);
+    } catch (err) {
+      console.error('Fetch orders error:', err);
+    }
+  }, []);
+
+  const fetchMenu = useCallback(async () => {
+    try {
+      const data = await restaurantAPI.getMenu();
+      if (Array.isArray(data)) setMenuItems(data);
+    } catch (err) {
+      console.error('Fetch menu error:', err);
+    }
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await restaurantAPI.getStats();
+      if (data) setStats(data);
+    } catch (err) {
+      console.error('Fetch stats error:', err);
+    }
+  }, []);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const data = await notificationsAPI.getUnreadCount();
+      if (data) setUnreadCount(data.count || 0);
+    } catch (err) {
+      console.error('Fetch unread error:', err);
+    }
+  }, []);
+
   // SONDAGE COMMANDES ACTIVES — remplace Socket.IO, indisponible sur ce
   // deploiement serverless Vercel (le backend n'expose que l'app Express a
   // la fonction, jamais le http.Server auquel Socket.IO attache ses upgrades).
@@ -369,43 +406,6 @@ function App() {
     const interval = setInterval(() => { fetchStats(); }, 20000);
     return () => clearInterval(interval);
   }, [token, fetchStats]);
-
-  // Charger les données
-  const fetchOrders = useCallback(async () => {
-    try {
-      const data = await restaurantAPI.getActiveOrders();
-      if (Array.isArray(data)) setOrders(data);
-    } catch (err) {
-      console.error('Fetch orders error:', err);
-    }
-  }, []);
-
-  const fetchMenu = useCallback(async () => {
-    try {
-      const data = await restaurantAPI.getMenu();
-      if (Array.isArray(data)) setMenuItems(data);
-    } catch (err) {
-      console.error('Fetch menu error:', err);
-    }
-  }, []);
-
-  const fetchStats = useCallback(async () => {
-    try {
-      const data = await restaurantAPI.getStats();
-      if (data) setStats(data);
-    } catch (err) {
-      console.error('Fetch stats error:', err);
-    }
-  }, []);
-
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const data = await notificationsAPI.getUnreadCount();
-      if (data) setUnreadCount(data.count || 0);
-    } catch (err) {
-      console.error('Fetch unread error:', err);
-    }
-  }, []);
 
   const fetchAnalytics = useCallback(async () => {
     try {
