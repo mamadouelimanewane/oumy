@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { paginate, paginatedResponse } = require('../middleware/pagination');
-const { getSettings, DEFAULTS } = require('../lib/settings');
+const { getSettings, DEFAULTS, BOOLEAN_KEYS } = require('../lib/settings');
 
 const router = express.Router();
 
@@ -34,6 +34,9 @@ router.put('/settings', async (req, res) => {
       if (key.endsWith('_pct') && value > 100) {
         return res.status(400).json({ error: `${key} ne peut pas depasser 100%` });
       }
+      if (BOOLEAN_KEYS.includes(key) && value !== 0 && value !== 1) {
+        return res.status(400).json({ error: `${key} doit valoir 0 ou 1` });
+      }
       updates[key] = value;
     }
     if (Object.keys(updates).length === 0) {
@@ -56,6 +59,59 @@ router.put('/settings', async (req, res) => {
     res.json({ message: 'Paramètres mis à jour', settings });
   } catch (err) {
     console.error('Update settings error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Monitoring — uniquement des signaux reellement mesurables depuis ce
+// process (latence API/DB reelles, compteurs reels sur des tables
+// existantes, activite recente issue de la vraie table notifications).
+// Pas de metriques inventees : Socket.IO/Wave/Orange Money sont annonces
+// pour ce qu'ils sont reellement (non fonctionnels / non integres sur ce
+// deploiement), pas comme "online".
+router.get('/monitoring', async (req, res) => {
+  const apiStart = Date.now();
+  try {
+    const dbStart = Date.now();
+    let dbOnline = true;
+    let dbLatencyMs = 0;
+    try {
+      await pool.query('SELECT 1');
+      dbLatencyMs = Date.now() - dbStart;
+    } catch (e) {
+      dbOnline = false;
+    }
+
+    const [activeOrders, fraudAlerts, pendingPayouts, recentActivity] = await Promise.all([
+      pool.query(`SELECT COUNT(*) as count FROM orders WHERE status IN ('nouvelle', 'preparation', 'prete', 'en_route')`),
+      pool.query(`SELECT COUNT(*) as count FROM fraud_alerts WHERE is_resolved = false`),
+      pool.query(`SELECT COUNT(*) as count FROM payouts WHERE status = 'en_attente'`),
+      pool.query(`SELECT type, title, message, created_at FROM notifications ORDER BY created_at DESC LIMIT 10`),
+    ]);
+
+    const vapidConfigured = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+    const apiLatencyMs = Date.now() - apiStart;
+
+    res.json({
+      active_orders: parseInt(activeOrders.rows[0].count),
+      fraud_alerts_unresolved: parseInt(fraudAlerts.rows[0].count),
+      pending_payouts: parseInt(pendingPayouts.rows[0].count),
+      services: [
+        { name: 'API Backend', status: 'online', detail: `${apiLatencyMs}ms` },
+        { name: 'PostgreSQL', status: dbOnline ? 'online' : 'offline', detail: dbOnline ? `${dbLatencyMs}ms` : 'Injoignable' },
+        { name: 'Temps réel (Socket.IO)', status: 'offline', detail: 'Non supporté sur ce déploiement serverless — remplacé par sondage REST' },
+        { name: 'Notifications Push (VAPID)', status: vapidConfigured ? 'online' : 'offline', detail: vapidConfigured ? 'Configuré' : 'Clés VAPID absentes' },
+        { name: 'Wave / Orange Money', status: 'manual', detail: 'Mode démo : dépôt déclaratif + validation manuelle admin, pas d\'intégration paiement réelle' },
+      ],
+      recent_activity: recentActivity.rows.map((r) => ({
+        time: r.created_at,
+        event: r.title,
+        detail: r.message,
+        type: r.type,
+      })),
+    });
+  } catch (err) {
+    console.error('Monitoring error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

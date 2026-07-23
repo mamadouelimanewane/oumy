@@ -101,6 +101,11 @@ export const adminAPI = {
     });
     return res.json();
   },
+
+  getMonitoring: async () => {
+    const res = await fetchWithAuth('/admin/monitoring');
+    return res.json();
+  },
 };
 
 export const payoutsAPI = {

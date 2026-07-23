@@ -24,6 +24,11 @@ router.post('/orders', authenticate, [
     const { restaurant_id, items, delivery_address, latitude, longitude, payment_method, promo_code, scheduled_for } = req.body;
     const client_id = req.user.id;
 
+    const settings = await getSettings();
+    if (settings.maintenance_mode) {
+      return res.status(503).json({ error: 'Les commandes sont temporairement suspendues (maintenance en cours). Réessayez plus tard.' });
+    }
+
     // Vérifier que scheduled_for est au moins 1 heure dans le futur
     const scheduledDate = new Date(scheduled_for);
     const minDate = new Date(Date.now() + 60 * 60 * 1000);
@@ -104,7 +109,6 @@ router.post('/orders', authenticate, [
     }
 
     const final_amount = total_amount - discount_amount;
-    const settings = await getSettings();
     const delivery_fee = calculateDeliveryFee(restaurant.latitude, restaurant.longitude, latitude, longitude, settings.delivery_fee_base, settings.delivery_fee_per_km);
 
     // Créer la commande programmée

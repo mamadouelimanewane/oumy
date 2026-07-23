@@ -175,6 +175,11 @@ router.post('/:id/finalize', [
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const settings = await getSettings();
+    if (settings.maintenance_mode) {
+      return res.status(503).json({ error: 'Les commandes sont temporairement suspendues (maintenance en cours). Réessayez plus tard.' });
+    }
+
     const groupOrder = await pool.query(
       `SELECT * FROM group_orders WHERE id = $1 AND creator_id = $2 AND status = 'open'`,
       [req.params.id, req.user.id]
@@ -207,7 +212,6 @@ router.post('/:id/finalize', [
       'SELECT latitude, longitude FROM users WHERE id = $1',
       [groupOrder.rows[0].restaurant_id]
     );
-    const settings = await getSettings();
     const deliveryFee = calculateDeliveryFee(
       restaurantResult.rows[0]?.latitude, restaurantResult.rows[0]?.longitude, latitude, longitude,
       settings.delivery_fee_base, settings.delivery_fee_per_km

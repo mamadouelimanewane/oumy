@@ -171,6 +171,11 @@ router.post('/orders', authenticate, [
     const { restaurant_id, items, delivery_address, latitude, longitude, payment_method, promo_code } = req.body;
     const client_id = req.user.id;
 
+    const settings = await getSettings();
+    if (settings.maintenance_mode) {
+      return res.status(503).json({ error: 'Les commandes sont temporairement suspendues (maintenance en cours). Réessayez plus tard.' });
+    }
+
     // Vérifier que le restaurant existe
     const restaurantCheck = await pool.query(
       'SELECT id, latitude, longitude FROM users WHERE id = $1 AND role = $2 AND is_active = true',
@@ -182,7 +187,6 @@ router.post('/orders', authenticate, [
     }
 
     const restaurant = restaurantCheck.rows[0];
-    const settings = await getSettings();
     const delivery_fee = calculateDeliveryFee(restaurant.latitude, restaurant.longitude, latitude, longitude, settings.delivery_fee_base, settings.delivery_fee_per_km);
 
     // Calculer le total et vérifier les articles
@@ -499,6 +503,11 @@ router.post('/orders/:id/reorder', authenticate, async (req, res) => {
     const { id } = req.params;
     const { delivery_address, latitude, longitude, payment_method } = req.body;
 
+    const settings = await getSettings();
+    if (settings.maintenance_mode) {
+      return res.status(503).json({ error: 'Les commandes sont temporairement suspendues (maintenance en cours). Réessayez plus tard.' });
+    }
+
     // Récupérer la commande originale avec ses items
     const orderCheck = await pool.query(
       'SELECT * FROM orders WHERE id = $1 AND client_id = $2',
@@ -548,7 +557,6 @@ router.post('/orders/:id/reorder', authenticate, async (req, res) => {
       'SELECT latitude, longitude FROM users WHERE id = $1',
       [originalOrder.restaurant_id]
     );
-    const settings = await getSettings();
     const delivery_fee = calculateDeliveryFee(
       restaurantResult.rows[0]?.latitude, restaurantResult.rows[0]?.longitude, newLat, newLng,
       settings.delivery_fee_base, settings.delivery_fee_per_km

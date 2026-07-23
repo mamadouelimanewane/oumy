@@ -265,9 +265,11 @@ function App() {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoForm, setPromoForm] = useState({ code: '', discount_type: 'percentage', discount_value: '', min_order_amount: 0 });
-  const [settingsForm, setSettingsForm] = useState({ commission_restaurant_pct: '', commission_courier_pct: '', delivery_fee_base: '', delivery_fee_per_km: '' });
+  const [settingsForm, setSettingsForm] = useState({ commission_restaurant_pct: '', commission_courier_pct: '', delivery_fee_base: '', delivery_fee_per_km: '', maintenance_mode: false, weekly_report_enabled: false });
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
+  const [monitoring, setMonitoring] = useState(null);
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('admin_token');
@@ -399,6 +401,8 @@ function App() {
           commission_courier_pct: String(data.commission_courier_pct),
           delivery_fee_base: String(data.delivery_fee_base),
           delivery_fee_per_km: String(data.delivery_fee_per_km),
+          maintenance_mode: !!data.maintenance_mode,
+          weekly_report_enabled: !!data.weekly_report_enabled,
         });
       }
     } catch (err) { console.error('Fetch settings error:', err); }
@@ -408,7 +412,12 @@ function App() {
     setSettingsSaving(true);
     setSettingsMessage('');
     try {
-      const data = await adminAPI.updateSettings(settingsForm);
+      const data = await adminAPI.updateSettings({
+        commission_restaurant_pct: settingsForm.commission_restaurant_pct,
+        commission_courier_pct: settingsForm.commission_courier_pct,
+        delivery_fee_base: settingsForm.delivery_fee_base,
+        delivery_fee_per_km: settingsForm.delivery_fee_per_km,
+      });
       if (data.error) {
         setSettingsMessage(data.error);
       } else {
@@ -421,6 +430,28 @@ function App() {
       setSettingsSaving(false);
     }
   };
+
+  const handleToggleSetting = async (key) => {
+    const nextValue = !settingsForm[key];
+    setSettingsForm((prev) => ({ ...prev, [key]: nextValue }));
+    try {
+      const data = await adminAPI.updateSettings({ [key]: nextValue ? 1 : 0 });
+      if (data.error) {
+        setSettingsForm((prev) => ({ ...prev, [key]: !nextValue }));
+      }
+    } catch (err) {
+      setSettingsForm((prev) => ({ ...prev, [key]: !nextValue }));
+    }
+  };
+
+  const fetchMonitoring = useCallback(async () => {
+    setMonitoringLoading(true);
+    try {
+      const data = await adminAPI.getMonitoring();
+      if (data && !data.error) setMonitoring(data);
+    } catch (err) { console.error('Fetch monitoring error:', err); }
+    setMonitoringLoading(false);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -442,6 +473,13 @@ function App() {
     if (user && activeTab === 'promotions') fetchPromos();
     if (user && activeTab === 'settings') fetchSettings();
   }, [user, activeTab, fetchRestaurants, fetchCouriers, fetchClients, fetchOrders, fetchPayouts, fetchDeposits, fetchPromos, fetchSettings]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'monitoring') return;
+    fetchMonitoring();
+    const interval = setInterval(fetchMonitoring, 15000);
+    return () => clearInterval(interval);
+  }, [user, activeTab, fetchMonitoring]);
 
   const handleLogin = (userData, tokenData) => { setUser(userData); setToken(tokenData); };
 
@@ -1266,20 +1304,24 @@ function App() {
                   <div className="glass-panel p-8 rounded-3xl border border-slate-700/30">
                      <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-400" /> Statut du Système</h3>
                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl">
+                        <button onClick={() => handleToggleSetting('maintenance_mode')} className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl hover:bg-slate-800 transition-colors text-left">
                            <div>
                               <p className="text-sm font-bold text-white">Mode Maintenance</p>
-                              <p className="text-[10px] text-slate-500">Désactiver les commandes clients</p>
+                              <p className="text-[10px] text-slate-500">{settingsForm.maintenance_mode ? 'Commandes clients désactivées' : 'Désactiver les commandes clients'}</p>
                            </div>
-                           <ToggleLeft className="w-8 h-8 text-slate-600" />
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl">
+                           {settingsForm.maintenance_mode
+                             ? <ToggleRight className="w-8 h-8 text-red-400 shrink-0" />
+                             : <ToggleLeft className="w-8 h-8 text-slate-600 shrink-0" />}
+                        </button>
+                        <button onClick={() => handleToggleSetting('weekly_report_enabled')} className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl hover:bg-slate-800 transition-colors text-left">
                            <div>
                               <p className="text-sm font-bold text-white">Rapport Hebdomadaire Auto</p>
-                              <p className="text-[10px] text-slate-500">Envoyer par email aux admins</p>
+                              <p className="text-[10px] text-slate-500">Préférence enregistrée — envoi par email non configuré (aucun fournisseur email branché)</p>
                            </div>
-                           <ToggleRight className="w-8 h-8 text-green-400" />
-                        </div>
+                           {settingsForm.weekly_report_enabled
+                             ? <ToggleRight className="w-8 h-8 text-green-400 shrink-0" />
+                             : <ToggleLeft className="w-8 h-8 text-slate-600 shrink-0" />}
+                        </button>
                      </div>
                   </div>
                </div>
@@ -1318,17 +1360,22 @@ function App() {
           {activeTab === 'monitoring' && (
             <div className="relative z-10 animate-in fade-in duration-500">
               <h2 className="text-2xl font-black text-white mb-6">Monitoring Système 📊</h2>
+              {monitoringLoading && !monitoring ? (
+                <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
+              ) : !monitoring ? (
+                <p className="text-slate-500 text-center py-10">Impossible de charger le monitoring</p>
+              ) : (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 {[
-                  { label: 'API Latence', value: '45ms', icon: '⚡', color: 'from-green-500 to-emerald-600', status: 'OK' },
-                  { label: 'Uptime', value: '99.97%', icon: '🟢', color: 'from-blue-500 to-indigo-600', status: 'OK' },
-                  { label: 'Connexions Socket', value: '234', icon: '🔌', color: 'from-purple-500 to-violet-600', status: 'Actif' },
-                  { label: 'Erreurs (24h)', value: '3', icon: '⚠️', color: 'from-yellow-500 to-orange-600', status: 'Faible' },
+                  { label: 'Commandes actives', value: monitoring.active_orders, icon: '📦', color: 'from-blue-500 to-indigo-600' },
+                  { label: 'Alertes fraude', value: monitoring.fraud_alerts_unresolved, icon: '⚠️', color: monitoring.fraud_alerts_unresolved > 0 ? 'from-yellow-500 to-orange-600' : 'from-green-500 to-emerald-600' },
+                  { label: 'Retraits en attente', value: monitoring.pending_payouts, icon: '💸', color: 'from-purple-500 to-violet-600' },
+                  { label: 'Base de données', value: monitoring.services.find(s => s.name === 'PostgreSQL')?.detail || '—', icon: '🐘', color: monitoring.services.find(s => s.name === 'PostgreSQL')?.status === 'online' ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600' },
                 ].map((m, i) => (
                   <div key={i} className={`bg-gradient-to-br ${m.color} rounded-2xl p-5 shadow-lg`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-2xl">{m.icon}</span>
-                      <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">{m.status}</span>
                     </div>
                     <p className="text-2xl font-black text-white">{m.value}</p>
                     <p className="text-xs text-white/70 font-bold">{m.label}</p>
@@ -1341,55 +1388,36 @@ function App() {
                 <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
                   <h3 className="text-lg font-black text-white mb-4">Santé des Services</h3>
                   <div className="space-y-3">
-                    {[
-                      { name: 'API Backend', status: 'online', latency: '45ms' },
-                      { name: 'PostgreSQL', status: 'online', latency: '12ms' },
-                      { name: 'Socket.IO', status: 'online', latency: '3ms' },
-                      { name: 'Wave Payment', status: 'online', latency: '120ms' },
-                      { name: 'Orange Money', status: 'online', latency: '95ms' },
-                      { name: 'Nominatim (Geo)', status: 'online', latency: '200ms' },
-                      { name: 'Push Notifications', status: 'online', latency: '50ms' },
-                    ].map((s, i) => (
+                    {monitoring.services.map((s, i) => (
                       <div key={i} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl">
                         <div className="flex items-center gap-3">
-                          <span className={`w-2.5 h-2.5 rounded-full ${s.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                          <span className="text-sm font-bold text-slate-300">{s.name}</span>
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-0.5 ${s.status === 'online' ? 'bg-green-500 animate-pulse' : s.status === 'manual' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
+                          <div>
+                            <span className="text-sm font-bold text-slate-300">{s.name}</span>
+                            <p className="text-[10px] text-slate-500">{s.detail}</p>
+                          </div>
                         </div>
-                        <span className="text-xs font-bold text-slate-500">{s.latency}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
-                  <h3 className="text-lg font-black text-white mb-4">Activité Temps Réel</h3>
+                  <h3 className="text-lg font-black text-white mb-4">Activité Récente</h3>
                   <div className="space-y-3">
-                    {[
-                      { time: '14:32', event: 'Nouvelle commande #1245', type: 'order' },
-                      { time: '14:30', event: 'Livreur Moussa connecté', type: 'driver' },
-                      { time: '14:28', event: 'Paiement Wave confirmé', type: 'payment' },
-                      { time: '14:25', event: 'Commande #1244 livrée', type: 'delivery' },
-                      { time: '14:22', event: 'Inscription nouveau client', type: 'user' },
-                      { time: '14:20', event: 'Alerte stock bas: Tiep', type: 'alert' },
-                      { time: '14:18', event: 'Avis 5⭐ Chef Ousmane', type: 'review' },
-                    ].map((e, i) => (
-                      <div key={i} className="flex items-center gap-3 p-2">
-                        <span className="text-[10px] font-mono text-slate-600 w-10">{e.time}</span>
-                        <span className={`w-2 h-2 rounded-full ${
-                          e.type === 'order' ? 'bg-blue-500' :
-                          e.type === 'driver' ? 'bg-green-500' :
-                          e.type === 'payment' ? 'bg-purple-500' :
-                          e.type === 'delivery' ? 'bg-emerald-500' :
-                          e.type === 'alert' ? 'bg-yellow-500' :
-                          e.type === 'review' ? 'bg-yellow-400' :
-                          'bg-indigo-500'
-                        }`}></span>
+                    {monitoring.recent_activity.length === 0 && <p className="text-slate-500 text-sm text-center py-6">Aucune activité récente</p>}
+                    {monitoring.recent_activity.map((e, i) => (
+                      <div key={i} className="flex items-start gap-3 p-2">
+                        <span className="text-[10px] font-mono text-slate-600 w-12 shrink-0 mt-0.5">{new Date(e.time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 mt-1.5"></span>
                         <span className="text-sm text-slate-400">{e.event}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </div>
           )}
 

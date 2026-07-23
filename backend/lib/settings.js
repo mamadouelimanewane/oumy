@@ -5,7 +5,13 @@ const DEFAULTS = {
   commission_courier_pct: 10,
   delivery_fee_base: 500,
   delivery_fee_per_km: 200,
+  maintenance_mode: 0,
+  weekly_report_enabled: 0,
 };
+
+// Cles booleennes (0/1) plutot que numeriques libres — validees a part dans
+// PUT /admin/settings.
+const BOOLEAN_KEYS = ['maintenance_mode', 'weekly_report_enabled'];
 
 // Lit tous les parametres plateforme (commissions + bareme de livraison),
 // avec repli sur DEFAULTS si la ligne n'existe pas encore en base (ex. si la
@@ -21,4 +27,4 @@ async function getSettings() {
   return settings;
 }
 
-module.exports = { getSettings, DEFAULTS };
+module.exports = { getSettings, DEFAULTS, BOOLEAN_KEYS };
