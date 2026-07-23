@@ -309,7 +309,7 @@ function App() {
         const data = await clientAPI.trackOrder(trackingOrder.id);
         if (cancelled || !data || data.error) return;
         if (data.courier_lat && data.courier_lng) {
-          setCourierLoc({ lat: data.courier_lat, lng: data.courier_lng });
+          setCourierLoc({ lat: Number(data.courier_lat), lng: Number(data.courier_lng) });
         }
         if (data.status !== prevStatus) {
           prevStatus = data.status;
@@ -1057,7 +1057,7 @@ function App() {
                     <button
                       onClick={() => {
                         setTrackingOrder(order);
-                        setCourierLoc({ lat: order.courier_lat, lng: order.courier_lng });
+                        setCourierLoc(order.courier_lat && order.courier_lng ? { lat: Number(order.courier_lat), lng: Number(order.courier_lng) } : null);
                       }}
                       className="flex-1 bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2"
                     >
@@ -1172,7 +1172,7 @@ function App() {
                            <p className="text-[10px] font-black text-primary uppercase tracking-widest">Livreur en approche</p>
                            <h4 className="font-black text-gray-900">{trackingOrder?.courier_name || 'Livreur'}</h4>
                            <p className="text-xs text-gray-500 font-medium">
-                             {courierLoc ? `Position : ${courierLoc.lat.toFixed(4)}, ${courierLoc.lng.toFixed(4)}` : 'Localisation...'}
+                             {courierLoc?.lat != null && courierLoc?.lng != null ? `Position : ${Number(courierLoc.lat).toFixed(4)}, ${Number(courierLoc.lng).toFixed(4)}` : 'Localisation...'}
                            </p>
                         </div>
                         <button onClick={() => setChatOpen(!chatOpen)} className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">

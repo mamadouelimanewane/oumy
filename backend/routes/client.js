@@ -390,6 +390,7 @@ router.get('/orders/:id/track', authenticate, async (req, res) => {
 
     const orderResult = await pool.query(
       `SELECT o.*, r.name as restaurant_name, r.address as restaurant_address,
+              r.latitude as restaurant_lat, r.longitude as restaurant_lng,
               c.name as courier_name, c.phone as courier_phone,
               cl.latitude as courier_lat, cl.longitude as courier_lng
        FROM orders o
