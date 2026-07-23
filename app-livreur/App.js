@@ -238,6 +238,7 @@ export default function App() {
   const handleToggleStatus = () => {
     const nextStatus = !isOnline;
     setIsOnline(nextStatus);
+    livreurAPI.setStatus(nextStatus).catch((err) => console.error('Erreur statut en ligne:', err));
     if (!nextStatus) {
       setDeliveryState('idle');
       setOrder(null);

@@ -40,6 +40,29 @@ router.post('/location', [
   }
 });
 
+// Basculer disponibilité (en ligne / hors ligne). Utilise une colonne dediee
+// is_online, distincte de is_active (qui gere l'activation du compte par
+// l'admin) — les confondre bloquerait la reconnexion d'un livreur qui vient
+// de passer hors ligne (auth.js refuse le login si is_active = false).
+router.put('/status', [
+  body('is_online').isBoolean().withMessage('is_online doit etre un booleen'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { is_online } = req.body;
+    await pool.query('UPDATE users SET is_online = $1 WHERE id = $2', [is_online, req.user.id]);
+
+    res.json({ message: is_online ? 'Livreur en ligne' : 'Livreur hors ligne', is_online });
+  } catch (err) {
+    console.error('Update courier online status error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // Récupérer les commandes disponibles pour livraison
 router.get('/orders/available', async (req, res) => {
   try {

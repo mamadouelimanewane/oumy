@@ -105,7 +105,7 @@ router.get('/couriers', async (req, res) => {
     );
 
     const result = await pool.query(
-      `SELECT u.id, u.name, u.phone, u.email, u.address, u.is_active, u.created_at,
+      `SELECT u.id, u.name, u.phone, u.email, u.address, u.is_active, u.is_online, u.created_at,
               COUNT(DISTINCT o.id) as total_deliveries,
               COALESCE(SUM(o.total_amount), 0) as total_amount,
               cl.latitude, cl.longitude, cl.updated_at as last_location

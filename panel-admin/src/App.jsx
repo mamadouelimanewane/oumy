@@ -893,7 +893,7 @@ function App() {
                         <th className="px-6 py-4 font-bold">Contact</th>
                         <th className="px-6 py-4 font-bold">Livraisons</th>
                         <th className="px-6 py-4 font-bold">Total Encaissé</th>
-                        <th className="px-6 py-4 font-bold">Position</th>
+                        <th className="px-6 py-4 font-bold">Disponibilité</th>
                         <th className="px-6 py-4 font-bold">Statut</th>
                         <th className="px-6 py-4 font-bold text-right">Action</th>
                       </tr>
@@ -911,10 +911,10 @@ function App() {
                           <td className="px-6 py-4 text-sm text-slate-300 font-bold">{c.total_deliveries}</td>
                           <td className="px-6 py-4 text-sm font-bold text-white">{formatPrice(c.total_amount)}</td>
                           <td className="px-6 py-4">
-                             {c.latitude ? (
-                               <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">Actif</span>
+                             {c.is_online ? (
+                               <span className="text-[10px] font-bold text-green-400 bg-green-500/10 px-2 py-1 rounded">En ligne</span>
                              ) : (
-                               <span className="text-[10px] font-bold text-slate-500">Inconnu</span>
+                               <span className="text-[10px] font-bold text-slate-500 bg-slate-500/10 px-2 py-1 rounded">Hors ligne</span>
                              )}
                           </td>
                           <td className="px-6 py-4">

@@ -435,6 +435,7 @@ if (USE_POSTGRES) {
       'ALTER TABLE users ADD COLUMN otp_code TEXT',
       'ALTER TABLE users ADD COLUMN otp_expires DATETIME',
       'ALTER TABLE users ADD COLUMN two_fa_verified INTEGER DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN is_online INTEGER DEFAULT 0',
     ];
     for (const stmt of alterStatements) {
       try { db.exec(stmt); } catch(e) { /* column may already exist */ }
@@ -522,6 +523,7 @@ async function _createPostgresTables(client) {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code VARCHAR(10)',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMP',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS two_fa_verified BOOLEAN DEFAULT false',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false',
   ];
   for (const stmt of alterCols) {
     try { await client.query(stmt); } catch(e) { /* column may already exist */ }

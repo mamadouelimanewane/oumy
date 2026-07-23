@@ -7,7 +7,6 @@ const PROD_API_URL = 'https://oumy-orpin.vercel.app/api';
 export const API_URL = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
   ? (window.location.origin.includes('vercel.app') ? window.location.origin + '/api' : PROD_API_URL)
   : DEFAULT_API_URL;
-export const SOCKET_URL = API_URL.replace(/\/api$/, '');
 
 export const TOKEN_KEY = 'livreur_token';
 export const USER_KEY = 'livreur_user';
@@ -34,6 +33,7 @@ export const livreurAPI = {
   acceptOrder: async (id) => (await client.post(`/livreur/orders/${id}/accept`)).data,
   completeOrder: async (id) => (await client.post(`/livreur/orders/${id}/complete`)).data,
   updateLocation: async (latitude, longitude) => (await client.post('/livreur/location', { latitude, longitude })).data,
+  setStatus: async (isOnline) => (await client.put('/livreur/status', { is_online: isOnline })).data,
 };
 
 export const tipsAPI = {
